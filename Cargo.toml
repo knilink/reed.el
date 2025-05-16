@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dioxus-core = "0.6.3"
+dioxus-core-macro = "0.6.3"
+dioxus-hooks = "0.6.2"
+dioxus-signals = "0.6.3"
+emacs = "0.19.0"
+scoped-tls = "1.0.1"
+taffy = "0.8.1"
+
+[lib]
+crate-type = ["cdylib"]
+
