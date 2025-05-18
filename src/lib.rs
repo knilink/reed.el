@@ -12,7 +12,7 @@ use crate::template::register;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use emacs::{Env, Result, Value, Vector, defun};
+use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
 
 thread_local! {
     static RENDERING_CONTEXTS: RefCell<HashMap<String, RenderingContext>> = RefCell::new(HashMap::new());
@@ -75,5 +75,40 @@ fn clear_rendering_contexts<'e>(env: &'e Env) -> Result<()> {
             contexts.borrow_mut().clear();
         })
     });
+    Ok(())
+}
+
+#[defun]
+fn test_error<'e>(env: &'e Env, f: Value) -> Result<()> {
+    use emacs::ErrorKind;
+    match env.call(f, []) {
+        Ok(_) => {}
+        Err(error) => {
+            // env.call("message", ["error string %s", error]);
+            let a = error.downcast_ref::<ErrorKind>();
+
+            if let Some(ErrorKind::Signal { symbol, data }) = a {
+                // Accessing TempValue is unsafe, so ensure it's done within the scope
+                // where the Env from which the error originated is still valid.
+                // Get the data (error message) associated with the signal.  It's typically a list.
+                let data_value = unsafe { data.value(env) };
+                println!(
+                    "data_value: {:?}",
+                    env.call("error-message-string", [data_value])
+                        .unwrap()
+                        .into_rust::<String>()
+                );
+                // let maybe_message_value = data_value.car::<String>();
+                // println!("maybe_message_value: {:?}", maybe_message_value);
+                //
+                // // Assuming the message is the first element in the list.
+                // if let Ok(message) = maybe_message_value {
+                //     println!("resolved error message{:?}", message);
+                // }
+            } else {
+                println!("generic error message {}", error.to_string()); // Fallback to the generic error message.
+            }
+        }
+    };
     Ok(())
 }

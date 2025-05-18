@@ -17,6 +17,8 @@ pub struct TextNodeContext {}
 
 pub struct BoxNodeContext {}
 
+pub struct ErrorMessageContext {}
+
 pub struct TextTreeRootContext {
     pub container: NodeId,
 }
@@ -31,6 +33,7 @@ pub enum TuiNodeContext {
     TextTreeRoot(TextTreeRootContext),
     Text(TextNodeContext),
     TextLeaf(TextLeafContext),
+    ErrorMessage(ErrorMessageContext),
 }
 
 pub fn measure_text_block(
@@ -131,6 +134,9 @@ pub fn collect_text_blocks(
                 }
             }
             textbox_line.insert(node, canvas);
+        } else if let Some(TuiNodeContext::TextLeaf(ctx)) = doc.get_node_context(node) {
+            // This should only happen when parent is error message
+            textbox_line.insert(node, ctx.text.to_string());
         }
     }
     textbox_line

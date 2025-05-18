@@ -168,6 +168,16 @@ This follows React's convention where components start with uppercase letters."
   "Process ESX syntax into static template, dynamic nodes, and dynamic attributes."
   (build-vnodes body))
 
+(defmacro fc! (component-name props &rest body)
+  `(defun ,component-name ,props
+     (condition-case err
+         (progn ,@body)
+       (error
+        (esx!
+         (error () ({} (format "[%s] %s"
+                               (symbol-name #',component-name)
+                               (error-message-string err)))))))))
+
 (defun handle-render (buffer-name)
   (let ((content (reed-render-immediate buffer-name)))
     (message "[handle-render] %s" content)

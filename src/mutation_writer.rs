@@ -1,6 +1,6 @@
 use crate::rendering_context::{
-    BoxNodeContext, TextBoxLeafContext, TextLeafContext, TextNodeContext, TextTreeRootContext,
-    TuiNodeContext,
+    BoxNodeContext, ErrorMessageContext, TextBoxLeafContext, TextLeafContext, TextNodeContext,
+    TextTreeRootContext, TuiNodeContext,
 };
 use dioxus_core::{AttributeValue, ElementId, Template, TemplateNode};
 use std::borrow::Cow;
@@ -381,6 +381,8 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 }),
                 // text
                 "span" => TuiNodeContext::Text(TextNodeContext {}),
+                // error
+                "error" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),
                 _ => panic!("unknown tag: {:?}", tag),
             };
 

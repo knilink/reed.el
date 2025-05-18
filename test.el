@@ -10,24 +10,24 @@
 
 (reed-init-tracing)
 
-(defun App2 ()
+(fc! App ()
   (let ((foo "foo quer\n")
         (flag (reed-hooks-use-signal (lambda () nil))))
     (reed-hooks-use-after-render
      (lambda ()
        (run-with-timer 1 nil (lambda () (reed-hooks-signal-set flag t)))))
-    (message "(funcall flag) %s" (reed-hooks-signal-get flag))
+    (message "(reed-hooks-signal-get flag) %s" (reed-hooks-signal-get flag))
     (esx!
      (div ()
           (p (:width "30.0")
              (span () "asdf\n1234567890123456789012345678901\n")
              (span () ({} foo))
-             (span () ({} (if (reed-hooks-signal-get flag) "true" "false"))))
+             (span () ({} (concat "flag is: " (if (reed-hooks-signal-get flag)) "true" "false"))))
           (p ()
              (span () "asdf\n\n")
              (span () "quer"))))))
 
-(defun App ()
+(defun App2 ()
   (let ((counter (reed-hooks-use-signal (lambda () 0))))
     (reed-hooks-use-after-render
      (lambda ()

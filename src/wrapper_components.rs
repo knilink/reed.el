@@ -3,7 +3,7 @@ use crate::globals::{
 };
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
-use dioxus_core::{Element, IntoDynNode, fc_to_builder};
+use dioxus_core::{Element, IntoDynNode, VText, fc_to_builder};
 use dioxus_core_macro::{Props, component};
 use emacs::{Value, Vector};
 
@@ -95,8 +95,30 @@ fn build_dynamic_attrs(attrs: Vector) -> Vec<Box<[dioxus_core::Attribute]>> {
         .collect()
 }
 
-// #[component]
-// pub fn ErrorComponent(message: &str) -> Element {};
+// fn error_message_element(message: String) -> Element {
+//     dioxus_core::Element::Ok({
+//         let __dynamic_nodes: [dioxus_core::DynamicNode; 1usize] =
+//             [dioxus_core::DynamicNode::Text(VText { value: message })];
+//
+//         static __TEMPLATE_ROOTS: &[dioxus_core::TemplateNode] =
+//             &[dioxus_core::TemplateNode::Element {
+//                 tag: "error",
+//                 namespace: None,
+//                 attrs: &[],
+//                 children: &[dioxus_core::TemplateNode::Dynamic { id: 0usize }],
+//             }];
+//
+//         static ___TEMPLATE: dioxus_core::Template = dioxus_core::Template {
+//             roots: __TEMPLATE_ROOTS,
+//             node_paths: &[&[0u8, 0u8]],
+//             attr_paths: &[],
+//         };
+//
+//         let __vnodes =
+//             dioxus_core::VNode::new(None, ___TEMPLATE, Box::new(__dynamic_nodes), Box::new([]));
+//         __vnodes
+//     })
+// }
 
 #[component]
 pub fn WrapperComponent(component_ref: ManagedGlobalRef, props_ref: ManagedGlobalRef) -> Element {
@@ -160,7 +182,12 @@ pub fn RootComponent() -> Element {
 
     CURRENT_EMACS_ENV.with(|env| {
         ROOT_COMPONENT.with(|root_component_ref| {
+            // let element = match root_component_ref.as_ref().call(env, []) {
+            //     Ok(element) => element,
+            //     Err(err) => return error_message_element(err.to_string()),
+            // };
             let element = root_component_ref.as_ref().call(env, []).unwrap();
+
             let mut cursor = element;
             let template_id: usize = element.car().unwrap();
             cursor = cursor.cdr().unwrap();
