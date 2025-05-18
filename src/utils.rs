@@ -33,3 +33,12 @@ where
         .into_rust::<T>()
         .unwrap()
 }
+
+pub fn symbol_name<'e>(value: Value<'e>) -> String {
+    value
+        .env
+        .call("symbol-name", [value])
+        .unwrap()
+        .into_rust::<String>()
+        .unwrap()
+}

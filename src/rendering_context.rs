@@ -7,7 +7,7 @@ use dioxus_core::{ElementId, VirtualDom};
 use emacs::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use taffy::prelude::{AvailableSpace, NodeId, Size, Style, TaffyMaxContent, TaffyTree};
+use taffy::prelude::{NodeId, Size, TaffyMaxContent, TaffyTree};
 
 pub struct TextLeafContext {
     pub text: Cow<'static, str>,
@@ -238,7 +238,20 @@ impl RenderingContext {
                 Size::MAX_CONTENT,
                 |known_dimensions, available_space, node_id, _node_context, _style| {
                     if let Some(text_block) = text_blocks.get(&node_id) {
-                        measure_text_block(known_dimensions, available_space, &text_block)
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(
+                            "[measure_text_block] known_dimensions:{:?} available_space:{:?} text_block:{:?}",
+                            known_dimensions,
+                            available_space,
+                            text_block
+                        );
+                        let res = measure_text_block(known_dimensions, available_space, &text_block);
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(
+                            "[measure_text_block] result:{:?}",
+                            res
+                        );
+                        res
                     } else {
                         Size::ZERO
                     }

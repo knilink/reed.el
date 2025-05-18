@@ -184,7 +184,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     fn set_attribute(
         &mut self,
         name: &'static str,
-        ns: Option<&'static str>,
+        _ns: Option<&'static str>,
         value: &AttributeValue,
         id: ElementId,
     ) {
@@ -194,7 +194,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         tracing::info!(
             "[set_attribute] node_id:{:?} ns: {:?} name:{}, value:{:?}",
             node_id,
-            ns,
+            _ns,
             name,
             value
         );
@@ -211,7 +211,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
         if let Some(Ok(style)) = style {
             let new_style: Option<Style> = match name {
-                "width" => match value {
+                ":width" => match value {
                     AttributeValue::Float(value) => {
                         let style = style.clone();
                         Some(Style {
@@ -224,7 +224,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
                     }
                     _ => None,
                 },
-                "height" => match value {
+                ":height" => match value {
                     AttributeValue::Float(value) => {
                         let style = style.clone();
                         Some(Style {
@@ -347,7 +347,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 } = attr
                 {
                     match *name {
-                        "width" => {
+                        ":width" => {
                             let value: f32 = str::parse(value).unwrap();
                             style = Style {
                                 size: Size {
@@ -357,7 +357,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                                 ..style
                             }
                         }
-                        "height" => {
+                        ":height" => {
                             let value: f32 = str::parse(value).unwrap();
                             style = Style {
                                 size: Size {
