@@ -17,6 +17,10 @@ pub struct TextNodeContext {}
 
 pub struct BoxNodeContext {}
 
+pub struct TextTreeRootContext {
+    pub container: NodeId,
+}
+
 pub struct TextBoxLeafContext {
     pub text_tree_root: NodeId,
 }
@@ -24,6 +28,7 @@ pub struct TextBoxLeafContext {
 pub enum TuiNodeContext {
     Box(BoxNodeContext),
     TextBox(TextBoxLeafContext),
+    TextTreeRoot(TextTreeRootContext),
     Text(TextNodeContext),
     TextLeaf(TextLeafContext),
 }
@@ -38,21 +43,24 @@ pub fn measure_text_block(
         // If width is explicitly specified, use it
         Some(width) => width,
         // Otherwise, calculate based on available space and line lengths
-        None => match available_space.width {
-            // If available space is definite, use the smaller of available space or max line length
-            taffy::style::AvailableSpace::Definite(available_width) => {
-                let max_line_length = content.lines().map(|l| l.len()).max().unwrap_or(0) as f32;
-                max_line_length.min(available_width)
+        None => {
+            match available_space.width {
+                // If available space is definite, use the smaller of available space or max line length
+                taffy::style::AvailableSpace::Definite(available_width) => {
+                    let max_line_length =
+                        content.lines().map(|l| l.len()).max().unwrap_or(0) as f32;
+                    max_line_length.min(available_width)
+                }
+                // For min-content constraint, use the minimum non-zero line length or zero
+                taffy::style::AvailableSpace::MinContent => {
+                    content.lines().map(|l| l.len()).min().unwrap_or(0) as f32
+                }
+                // For max-content constraint, use the maximum line length
+                taffy::style::AvailableSpace::MaxContent => {
+                    content.lines().map(|l| l.len()).max().unwrap_or(0) as f32
+                }
             }
-            // For min-content constraint, use the minimum non-zero line length or zero
-            taffy::style::AvailableSpace::MinContent => {
-                content.lines().map(|l| l.len()).min().unwrap_or(0) as f32
-            }
-            // For max-content constraint, use the maximum line length
-            taffy::style::AvailableSpace::MaxContent => {
-                content.lines().map(|l| l.len()).max().unwrap_or(0) as f32
-            }
-        },
+        }
     };
 
     // Handle height calculation
@@ -224,7 +232,6 @@ impl RenderingContext {
         });
 
         let text_blocks = collect_text_blocks(&self.doc, self.root_id);
-
         self.doc
             .compute_layout_with_measure(
                 self.root_id,

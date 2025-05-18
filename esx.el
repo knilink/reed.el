@@ -1,5 +1,12 @@
 ;; -*- lexical-binding: t -*-
 
+(defun element-tag-p (symbol)
+  "Return non-nil if SYMBOL's name starts with a lowercase letter, indicating an HTML tag.
+This follows React's convention where components start with uppercase letters."
+  (let ((name (symbol-name symbol)))
+    (and (not (string-empty-p name))
+         (<= ?a (aref name 0) ?z))))
+
 (defvar counter-stack '())
 
 (defun esx-next-dynamic-node-id ()
@@ -28,25 +35,24 @@
   "Determine if SYMBOL represents a component (non-HTML element)."
   (let ((tag (car node)))
     (and (symbolp tag)
-         (not (eq tag ':{}))
-         (not (string-prefix-p ":" (symbol-name tag))))))
+         (not (eq tag '{}))
+         (not (element-tag-p tag)))))
 
 (defun esx-template-note-dynamic-p (node)
   (let ((tag (car node)))
     (or
-         (eq tag ':{})
-         (not (string-prefix-p ":" (symbol-name tag))))))
+         (eq tag '{})
+         (not (element-tag-p tag)))))
 
 
 (defun esx-create-template-node (node)
-  "j"
   (if (stringp node)
       `(template-note:text :text ,node)
       (let ((tag (car node)))
         (cond
-         ((eq tag ':{}) `(template-note:dynamic :id ,(esx-next-dynamic-node-id)))
-         ((and (symbolp tag) (string-prefix-p ":" (symbol-name tag)))
-          (let ((tag-name (substring (symbol-name tag) 1)))
+         ((eq tag '{}) `(template-note:dynamic :id ,(esx-next-dynamic-node-id)))
+         ((and (symbolp tag) (element-tag-p tag))
+          (let ((tag-name (symbol-name tag)))
             `(template-note:element
               :tag ,tag-name
               :attrs ,(vconcat (esx-create-element-attr-template tag-name (cadr node)))
@@ -70,7 +76,7 @@
       (cond
        ((stringp v) `(template-attribute:static
                       :element-tag ,element-tag
-                      :name ,(substring (symbol-name k) 1)
+                      :name ,(symbol-name k)
                       :value ,v))
        (t `(template-attribute:dynamic :id ,(esx-next-dynamic-attr-id))))
       (esx-create-element-attr-template element-tag (cddr attrs))))))
@@ -87,8 +93,8 @@
                          (cons (1+ (car node-path)) (cdr node-path))
                          tail)))
           (cond
-           ((eq tag ':{}) `(((list 'dynamic-node:element . ,(cdr node)) . ,node-path) . ,new-tail))
-           ((and (symbolp tag) (string-prefix-p ":" (symbol-name tag)))
+           ((eq tag '{}) `(((list 'dynamic-node:element . ,(cdr node)) . ,node-path) . ,new-tail))
+           ((and (symbolp tag) (element-tag-p tag))
             (esx-collect-dynamic-nodes
              (cddr node)
              (cons 0 node-path)
@@ -105,7 +111,7 @@
             (new-tail (dynamic-attrs-from-pairs tag node-path (cddr attrs) tail)))
         (if (stringp v)
             new-tail
-          `(((list :tag ,tag :name ,(substring (symbol-name k) 1) :value ,v) . ,node-path) . ,new-tail)))
+          `(((list :tag ,tag :name ,(symbol-name k) :value ,v) . ,node-path) . ,new-tail)))
     tail))
 
 (defun esx-collect-dynamic-attrs (nodes node-path tail)
@@ -119,9 +125,9 @@
                          (cons (1+ (car node-path)) (cdr node-path))
                          tail)))
           (cond
-           ((and (symbolp tag) (string-prefix-p ":" (symbol-name tag)) (not (eq tag ':{})))
+           ((and (symbolp tag) (element-tag-p tag) (not (eq tag '{})))
             (dynamic-attrs-from-pairs
-             (substring (symbol-name tag) 1)
+             (symbol-name tag)
              node-path
              (cadr node)
              (esx-collect-dynamic-attrs (cddr node) (cons 0 node-path) new-tail)))
@@ -162,9 +168,9 @@
   "Process ESX syntax into static template, dynamic nodes, and dynamic attributes."
   (build-vnodes body))
 
-(defun use-signal (init)
-  (let ((handle (reed-hooks-use-signal init)))
-    (lambda (&rest rest)
-      (if rest
-          (reed-hooks-signal-set handle (car rest))
-        (reed-hooks-signal-get handle)))))
+(defun handle-render (buffer-name)
+  (let ((content (reed-render-immediate buffer-name)))
+    (message "[handle-render] %s" content)
+    (with-current-buffer (get-buffer-create buffer-name)
+      (erase-buffer)
+      (insert content))))

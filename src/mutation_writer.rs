@@ -1,5 +1,6 @@
 use crate::rendering_context::{
-    BoxNodeContext, TextBoxLeafContext, TextLeafContext, TextNodeContext, TuiNodeContext,
+    BoxNodeContext, TextBoxLeafContext, TextLeafContext, TextNodeContext, TextTreeRootContext,
+    TuiNodeContext,
 };
 use dioxus_core::{AttributeValue, ElementId, Template, TemplateNode};
 use std::borrow::Cow;
@@ -68,28 +69,39 @@ impl MutationWriter<'_> {
             self.doc.remove(id)
         }
     }
+
+    fn mark_text_box_dirty(&mut self, text_leaf: NodeId) {
+        let mut current_id = text_leaf;
+        while let Some(parent_id) = self.doc.parent(current_id) {
+            current_id = parent_id;
+            if let Some(TuiNodeContext::TextTreeRoot(ctx)) = self.doc.get_node_context(current_id) {
+                self.doc.mark_dirty(ctx.container).unwrap();
+                return;
+            };
+        }
+    }
 }
 
 impl dioxus_core::WriteMutations for MutationWriter<'_> {
     fn append_children(&mut self, id: ElementId, m: usize) {
-        // #[cfg(feature = "tracing")]
-        println!("append_children id:{} m:{}", id.0, m);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[append_children] id:{} m:{}", id.0, m);
 
         let children = self.state.stack.split_off(self.state.stack.len() - m);
         let parent = self.state.element_to_node_id(id);
-        println!("[append_children] {:?} {:?}", parent, children);
+
         add_childrens(self.doc, parent, &children);
     }
 
     fn assign_node_id(&mut self, path: &'static [u8], id: ElementId) {
-        // #[cfg(feature = "tracing")]
-        println!("assign_node_id path:{:?} id:{}", path, id.0);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[assign_node_id] path:{:?} id:{}", path, id.0);
 
         // If there is an existing node already mapped to that ID and
         // it has no parent, then drop it
         if let Some(node_id) = self.state.try_element_to_node_id(id) {
             if let None = self.doc.parent(node_id) {
-                self.remove_node(node_id);
+                self.remove_node(node_id).unwrap();
             }
         }
 
@@ -98,8 +110,8 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn create_placeholder(&mut self, id: ElementId) {
-        // #[cfg(feature = "tracing")]
-        println!("create_placeholder id:{}", id.0);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[create_placeholder] id:{}", id.0);
 
         // TODO: no context
         let node_id = self.doc.new_leaf(Default::default()).unwrap();
@@ -108,8 +120,8 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn create_text_node(&mut self, value: &str, id: ElementId) {
-        // #[cfg(feature = "tracing")]
-        println!("create_text_node id:{} text:{}", id.0, value);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[create_text_node] id:{} text:{}", id.0, value);
 
         let node_id = self
             .doc
@@ -132,28 +144,28 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn replace_node_with(&mut self, id: ElementId, m: usize) {
-        // #[cfg(feature = "tracing")]
-        println!("replace_node_with id:{} m:{}", id.0, m);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[replace_node_with] id:{} m:{}", id.0, m);
 
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.state.element_to_node_id(id);
         insert_before(self.doc, anchor_node_id, &new_nodes);
-        self.remove_node(anchor_node_id);
+        self.remove_node(anchor_node_id).unwrap();
     }
 
     fn replace_placeholder_with_nodes(&mut self, path: &'static [u8], m: usize) {
-        // #[cfg(feature = "tracing")]
-        println!("replace_placeholder_with_nodes path:{:?} m:{}", path, m);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[replace_placeholder_with_nodes] path:{:?} m:{}", path, m);
 
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.load_child(path);
         insert_before(self.doc, anchor_node_id, &new_nodes);
-        self.remove_node(anchor_node_id);
+        self.remove_node(anchor_node_id).unwrap();
     }
 
     fn insert_nodes_after(&mut self, id: ElementId, m: usize) {
-        // #[cfg(feature = "tracing")]
-        println!("insert_nodes_after id:{} m:{}", id.0, m);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[insert_nodes_after] id:{} m:{}", id.0, m);
 
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.state.element_to_node_id(id);
@@ -161,8 +173,8 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn insert_nodes_before(&mut self, id: ElementId, m: usize) {
-        // #[cfg(feature = "tracing")]
-        println!("insert_nodes_before id:{} m:{}", id.0, m);
+        #[cfg(feature = "tracing")]
+        tracing::info!("[insert_nodes_before] id:{} m:{}", id.0, m);
 
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.state.element_to_node_id(id);
@@ -176,12 +188,11 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         value: &AttributeValue,
         id: ElementId,
     ) {
-        println!("[set_attribute] {:?}", name);
         let node_id = self.state.element_to_node_id(id);
 
         #[cfg(feature = "tracing")]
         tracing::info!(
-            "set_attribute node_id:{} ns: {:?} name:{}, value:{:?}",
+            "[set_attribute] node_id:{:?} ns: {:?} name:{}, value:{:?}",
             node_id,
             ns,
             name,
@@ -190,15 +201,13 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
         let style = if let Some(ctx) = self.doc.get_node_context(node_id) {
             match ctx {
-                TuiNodeContext::Box(ctx) => Some(self.doc.style(node_id)),
-                TuiNodeContext::TextBox(ctx) => Some(self.doc.style(node_id)),
+                TuiNodeContext::Box(_) => Some(self.doc.style(node_id)),
+                TuiNodeContext::TextBox(_) => Some(self.doc.style(node_id)),
                 _ => None,
             }
         } else {
             None
         };
-
-        println!("attrname {}", name);
 
         if let Some(Ok(style)) = style {
             let new_style: Option<Style> = match name {
@@ -238,14 +247,14 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
     fn set_node_text(&mut self, value: &str, id: ElementId) {
         #[cfg(feature = "tracing")]
-        tracing::info!("set_node_text id:{} value:{}", id.0, value);
+        tracing::info!("[set_node_text] id:{} value:{}", id.0, value);
 
         let node_id = self.state.element_to_node_id(id);
 
         if let Some(TuiNodeContext::TextLeaf(ctx)) = self.doc.get_node_context_mut(node_id) {
             ctx.text = Cow::Owned(value.to_string());
         };
-        self.doc.mark_dirty(node_id).unwrap();
+        self.mark_text_box_dirty(node_id);
     }
 
     fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
@@ -258,15 +267,15 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
     fn remove_node(&mut self, id: ElementId) {
         #[cfg(feature = "tracing")]
-        tracing::info!("remove_node id:{}", id.0);
+        tracing::info!("[remove_node] id:{}", id.0);
 
         let node_id = self.state.element_to_node_id(id);
-        self.remove_node(node_id);
+        self.remove_node(node_id).unwrap();
     }
 
     fn push_root(&mut self, id: ElementId) {
         #[cfg(feature = "tracing")]
-        tracing::info!("push_root id:{}", id.0,);
+        tracing::info!("[push_root] id:{}", id.0,);
 
         let node_id = self.state.element_to_node_id(id);
         self.state.stack.push(node_id);
@@ -328,7 +337,6 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
             attrs,
             children,
         } => {
-            println!("[create_template_node][TemplateNode::Element]");
             let mut style: Style = Default::default();
 
             for attr in attrs.iter() {
@@ -338,7 +346,6 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                     namespace: _,
                 } = attr
                 {
-                    println!("attrname {}", *name);
                     match *name {
                         "width" => {
                             let value: f32 = str::parse(value).unwrap();
@@ -379,28 +386,31 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
 
             let id = doc.new_leaf_with_context(style, new_context).unwrap();
 
+            if let Some(TuiNodeContext::TextBox(ctx)) = doc.get_node_context(id) {
+                doc.set_node_context(
+                    ctx.text_tree_root,
+                    Some(TuiNodeContext::TextTreeRoot(TextTreeRootContext {
+                        container: id,
+                    })),
+                )
+                .unwrap();
+            }
+
             let child_ids: Vec<NodeId> = children
                 .iter()
                 .map(|child| create_template_node(doc, child))
                 .collect();
-            println!("[add_childrens]{:?} {:?}", id, child_ids);
             add_childrens(doc, id, &child_ids);
             id
         }
-        TemplateNode::Text { text } => {
-            println!("[TemplateNode::Text]");
-            doc.new_leaf_with_context(
+        TemplateNode::Text { text } => doc
+            .new_leaf_with_context(
                 Default::default(),
                 TuiNodeContext::TextLeaf(TextLeafContext {
                     text: Cow::Borrowed(text),
                 }),
             )
-            .unwrap()
-        }
-        TemplateNode::Dynamic { .. } => {
-            let a = doc.new_leaf(Default::default()).unwrap();
-            println!("[TemplateNode::Dynamic] {:?}", a);
-            a
-        }
+            .unwrap(),
+        TemplateNode::Dynamic { .. } => doc.new_leaf(Default::default()).unwrap(),
     }
 }

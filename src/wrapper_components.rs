@@ -127,13 +127,11 @@ fn build_dynamic_attrs(attrs: Vector) -> Vec<Box<[dioxus_core::Attribute]>> {
 
 #[component]
 pub fn WrapperComponent(component_ref: ManagedGlobalRef, props_ref: ManagedGlobalRef) -> Element {
-    println!("[WrapperComponent]start");
     let scope_id = dioxus_core::prelude::use_hook_with_cleanup(
         || {
             let scope_id = dioxus_core::prelude::current_scope_id().unwrap();
             SIGNAL_TABLES.with(|signal_tabels| {
                 let mut signal_tabels = signal_tabels.borrow_mut();
-                println!("[WrapperComponent][scope_id] {:?}", scope_id);
                 signal_tabels.insert(scope_id, SignalTable::new());
             });
             scope_id
@@ -144,10 +142,6 @@ pub fn WrapperComponent(component_ref: ManagedGlobalRef, props_ref: ManagedGloba
                 signal_tabels.remove(&scope_id);
             });
         },
-    );
-    println!(
-        "[WrapperComponent][scope_id] {:?}",
-        dioxus_core::prelude::current_scope_id().unwrap()
     );
 
     SIGNAL_TABLES.with(|signal_tabels| {
@@ -172,7 +166,6 @@ pub fn RootComponent() -> Element {
             let scope_id = dioxus_core::prelude::current_scope_id().unwrap();
             SIGNAL_TABLES.with(|signal_tabels| {
                 let mut signal_tabels = signal_tabels.borrow_mut();
-                println!("[WrapperComponent][scope_id] {:?}", scope_id);
                 signal_tabels.insert(scope_id, SignalTable::new());
             });
             scope_id
@@ -183,10 +176,6 @@ pub fn RootComponent() -> Element {
                 signal_tabels.remove(&scope_id);
             });
         },
-    );
-    println!(
-        "[RootComponent] {:?}",
-        dioxus_core::prelude::current_scope_id().unwrap()
     );
 
     SIGNAL_TABLES.with(|signal_tabels| {

@@ -16,7 +16,6 @@ fn use_signal<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
                     ManagedGlobalRef::from(res)
                 })
             });
-            println!("[use_signal][scope_id] {:?}", scope_id);
             let res = signal_tables
                 .borrow_mut()
                 .get_mut(&scope_id)
@@ -26,7 +25,6 @@ fn use_signal<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
             env.call("cons", [scope_id.0.into_lisp(env)?, res.into_lisp(env)?])
         })
     });
-    println!("[use_signal][end]");
     res
 }
 
@@ -49,7 +47,6 @@ fn signal_get<'e>(env: &'e Env, handle: Value) -> Result<Value<'e>> {
 
 #[defun]
 fn signal_set<'e>(env: &'e Env, handle: Value, value: Value) -> Result<()> {
-    println!("[signal_set] start");
     let res = CURRENT_EMACS_ENV.set(env, || {
         SIGNAL_TABLES.with(|signal_tables| {
             let scope_id = ScopeId(handle.car::<usize>()?);
@@ -64,21 +61,17 @@ fn signal_set<'e>(env: &'e Env, handle: Value, value: Value) -> Result<()> {
             Ok(())
         })
     });
-    println!("[signal_set] end");
     res
 }
 
 #[defun]
 fn use_effect<'e>(_: &'e Env, f: Value) -> Result<()> {
-    println!("[use_effect][start]");
     let f_ref = ManagedGlobalRef::from(f);
     dioxus_hooks::use_effect(move || {
         CURRENT_EMACS_ENV.with(|env| {
-            println!("[use_effect]");
             f_ref.as_ref().call(env, []).unwrap();
         })
     });
-    println!("[use_effect][end]");
     Ok(())
 }
 

@@ -26,6 +26,17 @@ fn init(_: &Env) -> Result<()> {
 }
 
 #[defun]
+fn init_tracing<'e>(_: &'e Env) -> Result<()> {
+    use tracing_subscriber::fmt;
+
+    // Basic initialization
+    fmt().with_ansi(false).init();
+
+    tracing::info!("Tracing initialized");
+    Ok(())
+}
+
+#[defun]
 fn register_template<'e>(
     env: &'e Env,
     template: Vector,
@@ -47,7 +58,7 @@ fn register_app<'e>(env: &'e Env, name: String, root_component: Value) -> Result
 }
 
 #[defun]
-fn render<'e>(env: &'e Env, name: String) -> Result<String> {
+fn render_immediate<'e>(env: &'e Env, name: String) -> Result<String> {
     CURRENT_EMACS_ENV.set(env, || {
         RENDERING_CONTEXTS.with(|contexts| {
             let mut ctxs = contexts.borrow_mut();
