@@ -6,7 +6,7 @@ use dioxus_core::{AttributeValue, ElementId, Template, TemplateNode};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use taffy::prelude::{NodeId, TaffyTree};
-use taffy::{Dimension, Size, Style, TaffyResult, style_helpers::FromLength};
+use taffy::{Style, TaffyResult};
 
 pub struct DioxusState {
     /// Store of templates keyed by unique name
@@ -199,50 +199,16 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
             value
         );
 
-        let style = if let Some(ctx) = self.doc.get_node_context(node_id) {
-            match ctx {
-                TuiNodeContext::Box(_) => Some(self.doc.style(node_id)),
-                TuiNodeContext::TextBox(_) => Some(self.doc.style(node_id)),
+        let new_style: Option<Style> = match name {
+            ":style" => match value {
+                AttributeValue::Text(value) => Some(serde_lexpr::from_str(&value).unwrap()),
                 _ => None,
-            }
-        } else {
-            None
+            },
+            _ => None,
         };
-
-        if let Some(Ok(style)) = style {
-            let new_style: Option<Style> = match name {
-                ":width" => match value {
-                    AttributeValue::Float(value) => {
-                        let style = style.clone();
-                        Some(Style {
-                            size: Size {
-                                width: Dimension::from_length((*value) as f32),
-                                ..style.size
-                            },
-                            ..style
-                        })
-                    }
-                    _ => None,
-                },
-                ":height" => match value {
-                    AttributeValue::Float(value) => {
-                        let style = style.clone();
-                        Some(Style {
-                            size: Size {
-                                height: Dimension::from_length((*value) as f32),
-                                ..style.size
-                            },
-                            ..style
-                        })
-                    }
-                    _ => None,
-                },
-                _ => None,
-            };
-            if let Some(new_style) = new_style {
-                self.doc.set_style(node_id, new_style).unwrap();
-            }
-        };
+        if let Some(new_style) = new_style {
+            self.doc.set_style(node_id, new_style).unwrap();
+        }
     }
 
     fn set_node_text(&mut self, value: &str, id: ElementId) {
@@ -337,7 +303,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
             attrs,
             children,
         } => {
-            let mut style: Style = Default::default();
+            let mut style: Option<Style> = None;
 
             for attr in attrs.iter() {
                 if let dioxus_core::TemplateAttribute::Static {
@@ -347,25 +313,8 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 } = attr
                 {
                     match *name {
-                        ":width" => {
-                            let value: f32 = str::parse(value).unwrap();
-                            style = Style {
-                                size: Size {
-                                    width: Dimension::from_length(value),
-                                    ..style.size
-                                },
-                                ..style
-                            }
-                        }
-                        ":height" => {
-                            let value: f32 = str::parse(value).unwrap();
-                            style = Style {
-                                size: Size {
-                                    height: Dimension::from_length(value),
-                                    ..style.size
-                                },
-                                ..style
-                            }
+                        ":style" => {
+                            style = Some(serde_lexpr::from_str(&value).unwrap());
                         }
                         _ => {}
                     }
@@ -386,7 +335,15 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 _ => panic!("unknown tag: {:?}", tag),
             };
 
-            let id = doc.new_leaf_with_context(style, new_context).unwrap();
+            let id = doc
+                .new_leaf_with_context(
+                    match style {
+                        None => Style::default(),
+                        Some(style) => style,
+                    },
+                    new_context,
+                )
+                .unwrap();
 
             if let Some(TuiNodeContext::TextBox(ctx)) = doc.get_node_context(id) {
                 doc.set_node_context(

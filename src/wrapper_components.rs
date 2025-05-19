@@ -3,7 +3,7 @@ use crate::globals::{
 };
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
-use dioxus_core::{Element, IntoDynNode, VText, fc_to_builder};
+use dioxus_core::{Element, IntoDynNode, fc_to_builder};
 use dioxus_core_macro::{Props, component};
 use emacs::{Value, Vector};
 

@@ -34,7 +34,7 @@ where
         .unwrap()
 }
 
-pub fn symbol_name<'e>(value: Value<'e>) -> String {
+pub fn symbol_name(value: Value) -> String {
     value
         .env
         .call("symbol-name", [value])
