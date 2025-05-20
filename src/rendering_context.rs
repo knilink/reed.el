@@ -7,7 +7,9 @@ use dioxus_core::{ElementId, VirtualDom};
 use emacs::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use taffy::prelude::{NodeId, Size, TaffyMaxContent, TaffyTree};
+use taffy::prelude::{
+    AvailableSpace, Dimension, FromLength, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+};
 
 pub struct TextLeafContext {
     pub text: Cow<'static, str>,
@@ -56,7 +58,7 @@ pub fn measure_text_block(
                 }
                 // For min-content constraint, use the minimum non-zero line length or zero
                 taffy::style::AvailableSpace::MinContent => {
-                    content.lines().map(|l| l.len()).min().unwrap_or(0) as f32
+                    content.lines().map(|l| l.len()).max().unwrap_or(0) as f32
                 }
                 // For max-content constraint, use the maximum line length
                 taffy::style::AvailableSpace::MaxContent => {
@@ -193,6 +195,7 @@ pub struct RenderingContext {
     root_id: NodeId,
     dioxus_state: DioxusState,
     event_listeners: HashSet<(&'static str, ElementId)>,
+    size: Size<AvailableSpace>,
 }
 
 impl RenderingContext {
@@ -223,7 +226,23 @@ impl RenderingContext {
             root_id,
             dioxus_state,
             event_listeners,
+            size: Size::MAX_CONTENT,
         }
+    }
+
+    pub fn set_width(&mut self, width: f32) {
+        // self.size.width = AvailableSpace::from_length(width);
+        let style = self.doc.style(self.root_id).unwrap();
+        let _ = self.doc.set_style(
+            self.root_id,
+            Style {
+                size: Size::<Dimension> {
+                    width: Dimension::from_length(width),
+                    ..style.size
+                },
+                ..style.clone()
+            },
+        );
     }
 
     pub fn render(&mut self) -> String {
@@ -238,6 +257,7 @@ impl RenderingContext {
         });
 
         let text_blocks = collect_text_blocks(&self.doc, self.root_id);
+
         self.doc
             .compute_layout_with_measure(
                 self.root_id,

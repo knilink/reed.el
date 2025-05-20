@@ -84,6 +84,16 @@ fn clear_rendering_contexts<'e>(env: &'e Env) -> Result<()> {
 }
 
 #[defun]
+fn set_width<'e>(_: &'e Env, name: String, value: i64) -> Result<()> {
+    RENDERING_CONTEXTS.with(|contexts| {
+        let mut ctxs = contexts.borrow_mut();
+        let ctx = ctxs.get_mut(&name).unwrap();
+        ctx.set_width(value as f32);
+    });
+    Ok(())
+}
+
+#[defun]
 fn taffy_length<'e>(_: &'e Env, unit: Value, value: f64) -> Result<String> {
     let value: f32 = value as f32;
     let unit_name = symbol_name(unit);
