@@ -94,8 +94,14 @@ fn set_width<'e>(_: &'e Env, name: String, value: i64) -> Result<()> {
 }
 
 #[defun]
-fn taffy_length<'e>(_: &'e Env, unit: Value, value: f64) -> Result<String> {
-    let value: f32 = value as f32;
+fn taffy_length<'e>(_: &'e Env, unit: Value, value: Value) -> Result<String> {
+    let value: f32 = if let Ok(value) = value.into_rust::<i64>() {
+        value as f32
+    } else if let Ok(value) = value.into_rust::<f64>() {
+        value as f32
+    } else {
+        return Err(emacs::Error::msg(format!("value must be a number")));
+    };
     let unit_name = symbol_name(unit);
     let res = match unit_name.as_ref() {
         "percent" => Some(serde_lexpr::to_string(&CompactLength::from_percent(value))),

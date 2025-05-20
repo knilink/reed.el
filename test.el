@@ -30,9 +30,14 @@
                      (size
                       (width . ,(reed-taffy-length 'percent 1.0))
                       (height . ,AUTO))
-                     (text_align . LegacyRight))))
+                     )))
           (p (:style (style
                       `((display . Flex)
+                        (border
+                         (left . ,(reed-taffy-length 'length 2))
+                         (right . ,(reed-taffy-length 'length 2))
+                         (top . ,(reed-taffy-length 'length 2))
+                         (bottom . ,(reed-taffy-length 'length 2)))
                         (size
                          (width . ,(reed-taffy-length 'length 18.0))
                          (height . ,AUTO)))))

@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::usize;
 use taffy::prelude::{
-    AvailableSpace, Dimension, FromLength, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+    AvailableSpace, Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
 };
 
 pub struct TextLeafContext {
@@ -45,34 +45,35 @@ pub fn measure_text_block(
     content: &str,
 ) -> taffy::geometry::Size<f32> {
     // Handle width calculation
-    let width: usize = match known_dimensions.width {
-        // If width is explicitly specified, use it
-        Some(width) => width as usize,
-        // Otherwise, calculate based on available space and line lengths
-        None => {
-            match available_space.width {
-                // If available space is definite, use the smaller of available space or max line length
-                taffy::style::AvailableSpace::Definite(available_width) => available_width as usize,
-                // For min-content constraint, use the minimum non-zero line length or zero
-                taffy::style::AvailableSpace::MinContent => 1,
-                // For max-content constraint, use the maximum line length
-                taffy::style::AvailableSpace::MaxContent => usize::MAX,
+    println!(
+        "[known_dimensions]{:?} [available_space]{:?}",
+        known_dimensions, available_space
+    );
+    match available_space.width {
+        taffy::style::AvailableSpace::Definite(available_width) => Size {
+            width: available_width,
+            height: textwrap::wrap(content, available_width as usize).len() as f32,
+        },
+        taffy::style::AvailableSpace::MinContent => Size {
+            width: 1.0,
+            height: content.split('\n').map(|l| l.len()).sum::<usize>() as f32,
+        },
+        taffy::style::AvailableSpace::MaxContent => {
+            let lines = content.split('\n');
+            let mut height = 0usize;
+            let width = lines
+                .map(|l| {
+                    height += 1;
+                    l.len()
+                })
+                .max()
+                .unwrap_or(0);
+            Size {
+                width: width as f32,
+                height: height as f32,
             }
         }
-    };
-    let lines = textwrap::wrap(content, width);
-    let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) as f32;
-
-    // Handle height calculation
-    let height = match known_dimensions.height {
-        // If height is explicitly specified, use it
-        Some(height) => height,
-        // Otherwise, calculate based on the number of lines
-        None => lines.len() as f32,
-    };
-
-    // Return the calculated size
-    taffy::geometry::Size { width, height }
+    }
 }
 
 struct TaffyTreeIterator<'a, T> {
@@ -173,6 +174,96 @@ impl Canvas {
         }
     }
 
+    pub fn draw_border(&mut self, layout: &Layout) {
+        let content_left = layout.content_box_x() as usize;
+        let content_top = layout.content_box_y() as usize;
+        let content_right = content_left + (layout.content_box_width() as usize); //.saturating_sub(1);
+        let content_bottom = content_top + (layout.content_box_height() as usize); //.saturating_sub(1);
+        let left = layout.location.x as usize;
+        let top = layout.location.y as usize;
+        let right = left + (layout.size.width as usize); //.saturating_sub(1);
+        let bottom = top + (layout.size.height as usize); //.saturating_sub(1);
+        let mut chars = "│─│─┌┐┘└".chars();
+        // let mut chars = "████████".chars();
+        // let mut chars = "".chars();
+
+        let left_width = content_left - left;
+        if let Some(c) = chars.next() {
+            for i in 0..left_width {
+                let ii = left_width - i - 1;
+                for j in
+                    std::cmp::max(content_top - ii, top)..std::cmp::min(content_bottom + ii, bottom)
+                {
+                    self.buffer[j][left + i] = c;
+                }
+            }
+        }
+
+        let top_width = content_top - top;
+        if let Some(c) = chars.next() {
+            for i in 0..top_width {
+                let ii = top_width - i - 1;
+                for j in
+                    std::cmp::max(content_left - ii, left)..std::cmp::min(content_right + ii, right)
+                {
+                    self.buffer[top + i][j] = c;
+                }
+            }
+        }
+
+        let right_width = right - content_right;
+        if let Some(c) = chars.next() {
+            for i in 0..right_width {
+                let ii = right_width - i - 1;
+                for j in
+                    std::cmp::max(content_top - ii, top)..std::cmp::min(content_bottom + ii, bottom)
+                {
+                    self.buffer[j][right - 1 - i] = c;
+                }
+            }
+        }
+
+        let bottom_width = bottom - content_bottom;
+        if let Some(c) = chars.next() {
+            for i in 0..bottom_width {
+                let ii = bottom_width - i - 1;
+                for j in
+                    std::cmp::max(content_left - ii, left)..std::cmp::min(content_right + ii, right)
+                {
+                    self.buffer[bottom - 1 - i][j] = c;
+                }
+            }
+        }
+
+        if let Some(c) = chars.next() {
+            for i in 0..std::cmp::min(left_width, top_width) {
+                self.buffer[content_top - 1 - i][content_left - 1 - i] = c;
+                // self.buffer[top + i][left + i] = c;
+            }
+        }
+
+        if let Some(c) = chars.next() {
+            for i in 0..std::cmp::min(right_width, top_width) {
+                self.buffer[content_top - 1 - i][content_right + i] = c;
+                // self.buffer[top + i][right - i - 1] = '┐';
+            }
+        }
+
+        if let Some(c) = chars.next() {
+            for i in 0..std::cmp::min(right_width, bottom_width) {
+                self.buffer[content_bottom + i][content_right + i] = c;
+                // self.buffer[bottom - i - 1][right - i - 1] = '┘';
+            }
+        }
+
+        if let Some(c) = chars.next() {
+            for i in 0..std::cmp::min(left_width, bottom_width) {
+                self.buffer[content_bottom + i][content_left - i - 1] = c;
+                // self.buffer[bottom - i - 1][left + i] = '└';
+            }
+        }
+    }
+
     /// Convert the canvas to a string
     pub fn to_string(&self) -> String {
         self.buffer
@@ -267,6 +358,7 @@ impl RenderingContext {
                             text_block
                         );
                         let res = measure_text_block(known_dimensions, available_space, &text_block);
+                        println!("measure result {:?}",res);
                         #[cfg(feature = "tracing")]
                         tracing::debug!(
                             "[measure_text_block] result:{:?}",
@@ -281,21 +373,28 @@ impl RenderingContext {
             .unwrap();
 
         let layout = self.doc.layout(self.root_id).unwrap();
-        let mut canvas = Canvas::new(
-            layout.content_box_width() as usize,
-            layout.content_box_height() as usize,
-        );
+        println!("Canvas::new, {:?}", layout.size);
+        let mut canvas = Canvas::new(layout.size.width as usize, layout.size.height as usize);
 
         for (&key, value) in &text_blocks {
             let layout = self.doc.layout(key).unwrap();
             let width = layout.content_box_width() as usize;
             let lines = textwrap::wrap(value, width);
+            println!("[draw_text] {:?}", layout.content_box_size());
             canvas.draw_text(
                 layout.content_box_x() as usize,
                 layout.content_box_y() as usize,
                 &lines.iter().map(|l| l.as_ref()).collect::<Vec<_>>(),
             );
         }
+
+        let iterator = TaffyTreeIterator::new(&self.doc, self.root_id);
+        for node in iterator {
+            if let Ok(layout) = self.doc.layout(node) {
+                canvas.draw_border(layout);
+            }
+        }
+
         canvas.to_string()
     }
 }
