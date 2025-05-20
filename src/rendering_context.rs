@@ -7,6 +7,7 @@ use dioxus_core::{ElementId, VirtualDom};
 use emacs::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::usize;
 use taffy::prelude::{
     AvailableSpace, Dimension, FromLength, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
 };
@@ -44,36 +45,30 @@ pub fn measure_text_block(
     content: &str,
 ) -> taffy::geometry::Size<f32> {
     // Handle width calculation
-    let width = match known_dimensions.width {
+    let width: usize = match known_dimensions.width {
         // If width is explicitly specified, use it
-        Some(width) => width,
+        Some(width) => width as usize,
         // Otherwise, calculate based on available space and line lengths
         None => {
             match available_space.width {
                 // If available space is definite, use the smaller of available space or max line length
-                taffy::style::AvailableSpace::Definite(available_width) => {
-                    let max_line_length =
-                        content.lines().map(|l| l.len()).max().unwrap_or(0) as f32;
-                    max_line_length.min(available_width)
-                }
+                taffy::style::AvailableSpace::Definite(available_width) => available_width as usize,
                 // For min-content constraint, use the minimum non-zero line length or zero
-                taffy::style::AvailableSpace::MinContent => {
-                    content.lines().map(|l| l.len()).max().unwrap_or(0) as f32
-                }
+                taffy::style::AvailableSpace::MinContent => 1,
                 // For max-content constraint, use the maximum line length
-                taffy::style::AvailableSpace::MaxContent => {
-                    content.lines().map(|l| l.len()).max().unwrap_or(0) as f32
-                }
+                taffy::style::AvailableSpace::MaxContent => usize::MAX,
             }
         }
     };
+    let lines = textwrap::wrap(content, width);
+    let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) as f32;
 
     // Handle height calculation
     let height = match known_dimensions.height {
         // If height is explicitly specified, use it
         Some(height) => height,
         // Otherwise, calculate based on the number of lines
-        None => content.lines().count() as f32,
+        None => lines.len() as f32,
     };
 
     // Return the calculated size
@@ -161,8 +156,8 @@ impl Canvas {
     }
 
     /// Draw a multi-line string at the specified position
-    pub fn draw_text(&mut self, x: usize, y: usize, text: &str) {
-        for (dy, line) in text.lines().enumerate() {
+    pub fn draw_text(&mut self, x: usize, y: usize, lines: &[&str]) {
+        for (dy, line) in lines.into_iter().enumerate() {
             let current_y = y + dy;
             if current_y >= self.height {
                 break; // Don't draw beyond canvas height
@@ -293,10 +288,12 @@ impl RenderingContext {
 
         for (&key, value) in &text_blocks {
             let layout = self.doc.layout(key).unwrap();
+            let width = layout.content_box_width() as usize;
+            let lines = textwrap::wrap(value, width);
             canvas.draw_text(
                 layout.content_box_x() as usize,
                 layout.content_box_y() as usize,
-                &value,
+                &lines.iter().map(|l| l.as_ref()).collect::<Vec<_>>(),
             );
         }
         canvas.to_string()

@@ -34,7 +34,7 @@
           (p (:style (style
                       `((display . Flex)
                         (size
-                         (width . ,(reed-taffy-length 'percent 0.5))
+                         (width . ,(reed-taffy-length 'length 18.0))
                          (height . ,AUTO)))))
              (span () "asdf\n1234567890123456789012345678901\n")
              (span () ({} foo))
