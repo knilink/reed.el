@@ -1,15 +1,16 @@
+use crate::events::TuiEventManager;
 use crate::globals::ROOT_COMPONENT;
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::mutation_writer::{DioxusState, MutationWriter};
 use crate::wrapper_components::RootComponent;
 
-use dioxus_core::{ElementId, VirtualDom};
+use dioxus_core::VirtualDom;
 use emacs::Value;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::usize;
 use taffy::prelude::{
-    AvailableSpace, Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+    Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
 };
 
 pub struct TextLeafContext {
@@ -40,15 +41,12 @@ pub enum TuiNodeContext {
 }
 
 pub fn measure_text_block(
-    known_dimensions: taffy::geometry::Size<Option<f32>>,
+    _known_dimensions: taffy::geometry::Size<Option<f32>>,
     available_space: taffy::geometry::Size<taffy::style::AvailableSpace>,
     content: &str,
 ) -> taffy::geometry::Size<f32> {
     // Handle width calculation
-    println!(
-        "[known_dimensions]{:?} [available_space]{:?}",
-        known_dimensions, available_space
-    );
+
     match available_space.width {
         taffy::style::AvailableSpace::Definite(available_width) => Size {
             width: available_width,
@@ -185,6 +183,7 @@ impl Canvas {
         let bottom = top + (layout.size.height as usize); //.saturating_sub(1);
         let mut chars = "│─│─┌┐┘└".chars();
         // let mut chars = "████████".chars();
+        // let mut chars = "|=|=/\\/\\".chars();
         // let mut chars = "".chars();
 
         let left_width = content_left - left;
@@ -280,8 +279,9 @@ pub struct RenderingContext {
     doc: TaffyTree<TuiNodeContext>,
     root_id: NodeId,
     dioxus_state: DioxusState,
-    event_listeners: HashSet<(&'static str, ElementId)>,
-    size: Size<AvailableSpace>,
+    event_manager: TuiEventManager,
+    window_width: usize,
+    // size: Size<AvailableSpace>,
 }
 
 impl RenderingContext {
@@ -294,14 +294,14 @@ impl RenderingContext {
             stack: Vec::new(),
             node_id_mapping: [Some(root_id)].to_vec(),
         };
-        let mut event_listeners = HashSet::new();
+        let mut event_manager = TuiEventManager::new();
         // let mutation_writter =
         ROOT_COMPONENT.set(&root_component_ref, || {
             let mut mutation_writer = MutationWriter {
                 doc: &mut doc,
                 // root_id,
                 state: &mut dioxus_state,
-                event_listeners: &mut event_listeners,
+                event_manager: &mut event_manager,
             };
             vdom.rebuild(&mut mutation_writer);
         });
@@ -311,13 +311,16 @@ impl RenderingContext {
             doc,
             root_id,
             dioxus_state,
-            event_listeners,
-            size: Size::MAX_CONTENT,
+            event_manager,
+            window_width: 80,
+            // size: Size::MAX_CONTENT,
         }
     }
 
-    pub fn set_width(&mut self, width: f32) {
+    pub fn set_width(&mut self, width: usize) {
         // self.size.width = AvailableSpace::from_length(width);
+        self.window_width = width;
+        let width = width as f32;
         let style = self.doc.style(self.root_id).unwrap();
         let _ = self.doc.set_style(
             self.root_id,
@@ -337,7 +340,7 @@ impl RenderingContext {
                 doc: &mut self.doc,
                 // root_id: self.root_id,
                 state: &mut self.dioxus_state,
-                event_listeners: &mut self.event_listeners,
+                event_manager: &mut self.event_manager,
             };
             self.vdom.render_immediate(&mut mutation_writer);
         });
@@ -358,7 +361,6 @@ impl RenderingContext {
                             text_block
                         );
                         let res = measure_text_block(known_dimensions, available_space, &text_block);
-                        println!("measure result {:?}",res);
                         #[cfg(feature = "tracing")]
                         tracing::debug!(
                             "[measure_text_block] result:{:?}",
@@ -373,14 +375,12 @@ impl RenderingContext {
             .unwrap();
 
         let layout = self.doc.layout(self.root_id).unwrap();
-        println!("Canvas::new, {:?}", layout.size);
         let mut canvas = Canvas::new(layout.size.width as usize, layout.size.height as usize);
 
         for (&key, value) in &text_blocks {
             let layout = self.doc.layout(key).unwrap();
             let width = layout.content_box_width() as usize;
             let lines = textwrap::wrap(value, width);
-            println!("[draw_text] {:?}", layout.content_box_size());
             canvas.draw_text(
                 layout.content_box_x() as usize,
                 layout.content_box_y() as usize,
@@ -396,5 +396,19 @@ impl RenderingContext {
         }
 
         canvas.to_string()
+    }
+
+    pub fn handle_cursor_event(&mut self, cursor_pos: usize, event_payload: ManagedGlobalRef) {
+        let cursor_pos = cursor_pos - 1;
+        self.event_manager.handle_cursor_move(
+            self.vdom.runtime(),
+            &self.doc,
+            &self.dioxus_state.node_id_mapping,
+            (
+                (cursor_pos % (self.window_width + 1)),
+                (cursor_pos / (self.window_width + 1)),
+            ),
+            event_payload,
+        );
     }
 }

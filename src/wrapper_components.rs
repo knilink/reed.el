@@ -5,7 +5,7 @@ use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
 use dioxus_core::{Element, IntoDynNode, fc_to_builder};
 use dioxus_core_macro::{Props, component};
-use emacs::{Value, Vector};
+use emacs::{IntoLisp, Value, Vector};
 
 fn build_element(vnode: Value) -> Element {
     let mut cur = vnode;
@@ -75,14 +75,44 @@ fn build_dynamic_nodes(nodes: Vector) -> Vec<dioxus_core::DynamicNode> {
         .collect()
 }
 
+fn build_attr_value(value: Value) -> dioxus_core::AttributeValue {
+    // #[allow(deprecated)]
+    // super::$name(event_handler)
+
+    if let Ok(value) = value.into_rust::<String>() {
+        dioxus_core::AttributeValue::Text(value)
+    } else if let Ok(value) = value.into_rust::<i64>() {
+        dioxus_core::AttributeValue::Int(value)
+    } else if let Ok(value) = value.into_rust::<f64>() {
+        dioxus_core::AttributeValue::Float(value)
+    } else if value.env.call("functionp", [value]).unwrap().is_not_nil() {
+        let callback_ref = ManagedGlobalRef::from(value);
+        dioxus_core::AttributeValue::listener(move |e: dioxus_core::Event<ManagedGlobalRef>| {
+            CURRENT_EMACS_ENV.with(|env| {
+                callback_ref.as_ref().call(env, [e.data.bind(env)]).unwrap();
+            });
+        })
+    } else {
+        dioxus_core::AttributeValue::None
+    }
+}
+
 fn build_dynamic_attrs(attrs: Vector) -> Vec<Box<[dioxus_core::Attribute]>> {
-    attrs
+    let res = attrs
         .into_iter()
         .map(|attr| {
             let tag: String = plist_get(attr, ":tag");
             let name: String = plist_get(attr, ":name");
-            let value: String = plist_get(attr, ":value");
-            let volatile = tag == "input" && value == "value";
+            let value: dioxus_core::AttributeValue = build_attr_value(plist_get(attr, ":value"));
+            let volatile = tag == "input" && name == "value";
+            if value == dioxus_core::AttributeValue::None {
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    "[build_dynamic_attrs] unknown attribute type tag:{} name:{}",
+                    tag,
+                    name
+                );
+            }
             [dioxus_core::Attribute::new(
                 intern(&name),
                 value,
@@ -92,7 +122,8 @@ fn build_dynamic_attrs(attrs: Vector) -> Vec<Box<[dioxus_core::Attribute]>> {
             .to_vec()
             .into_boxed_slice()
         })
-        .collect()
+        .collect();
+    res
 }
 
 // fn error_message_element(message: String) -> Element {

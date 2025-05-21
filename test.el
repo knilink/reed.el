@@ -19,9 +19,12 @@
 
 (fc! App ()
   (let ((foo "foo quer\n")
-        (flag (reed-hooks-use-signal (lambda () nil))))
-    (reed-hooks-use-after-render
+        (flag (reed-hooks-use-signal (lambda () nil)))
+        (counter (reed-hooks-use-signal (lambda () 0)))
+        (hovering (reed-hooks-use-signal (lambda () nil))))
+    (reed-hooks-use-effect
      (lambda ()
+       (message "use effect cb")
        (run-with-timer 1 nil (lambda () (reed-hooks-signal-set flag t)))))
     (message "(reed-hooks-signal-get flag) %s" (reed-hooks-signal-get flag))
     (esx!
@@ -31,19 +34,22 @@
                       (width . ,(reed-taffy-length 'percent 1.0))
                       (height . ,AUTO))
                      )))
-          (p (:style (style
+          (p
+           (:style (style
                       `((display . Flex)
                         (border
-                         (left . ,(reed-taffy-length 'length 2))
-                         (right . ,(reed-taffy-length 'length 2))
-                         (top . ,(reed-taffy-length 'length 2))
-                         (bottom . ,(reed-taffy-length 'length 2)))
+                         (left . ,(reed-taffy-length 'length 1))
+                         (right . ,(reed-taffy-length 'length 1))
+                         (top . ,(reed-taffy-length 'length 1))
+                         (bottom . ,(reed-taffy-length 'length 1)))
                         (size
                          (width . ,(reed-taffy-length 'length 18.0))
                          (height . ,AUTO)))))
              (span () "asdf\n1234567890123456789012345678901\n")
              (span () ({} foo))
              (span () ({} (concat "flag is: " (if (reed-hooks-signal-get flag) "true" "false")))))
+          (p (:onhover (lambda () (reed-hooks-signal-set hovering t)))
+             ({} (if (reed-hooks-signal-get hovering) "hovering" "not hovering")))
           (p (:style (style
                       `((display . Block)
                         (size
@@ -52,30 +58,28 @@
              (span () "asdf\n\n")
              (span () "quer"))))))
 
-(defun App2 ()
-  (let ((counter (reed-hooks-use-signal (lambda () 0))))
-    (reed-hooks-use-after-render
-     (lambda ()
-       (run-with-timer 1 nil
-                       (lambda ()
-                         (reed-hooks-signal-set counter (+ 200 (reed-hooks-signal-get counter)))
-                         ))))
-    (esx!
-     (div ()
-          (p (:style (prin1-to-string `(size (width . ,(reed-taffy-metric 'percent 50.0))) t))
-             (span () "\ncounter-1: ")
-             (span () ({} (number-to-string (reed-hooks-signal-get counter))))
-             (span () " end"))
-          (p ()
-             (span () "counter-2: ")
-             (span () ({} (number-to-string (reed-hooks-signal-get counter)))))))))
+(fc! App2 ()
+     (let ((hovering (reed-hooks-use-signal (lambda () nil))))
+       (esx!
+        (p (:foo "asdf" :onhover (lambda (&rest e)
+                                   (message "[onhover start] %s" e)
+                                   (reed-hooks-signal-set hovering t)
+                                   (message "[onhover end]")))
+           ({} (if (reed-hooks-signal-get hovering) "hovering" "not hovering"))))))
 
 
-(reed-register-app "test" #'App)
+(reed-register-app "test" #'App2)
 (reed-set-width "test" 105)
 
 (message "First output")
 (message "%s" (reed-render-immediate "test"))
+
+(run-with-timer
+ 1 nil
+ (lambda ()
+   (message "[reed-handle-event] start")
+   (reed-handle-event "test" 7 '(move 7))
+   (message "[reed-handle-event] end")))
 
 (with-timeout (3 (message "Timeout!"))
   (let ((flag t))

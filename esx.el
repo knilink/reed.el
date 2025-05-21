@@ -76,7 +76,7 @@ This follows React's convention where components start with uppercase letters."
       (cond
        ((stringp v) `(template-attribute:static
                       :element-tag ,element-tag
-                      :name ,(symbol-name k)
+                      :name ,(substring (symbol-name k) 1)
                       :value ,v))
        (t `(template-attribute:dynamic :id ,(esx-next-dynamic-attr-id))))
       (esx-create-element-attr-template element-tag (cddr attrs))))))
@@ -111,7 +111,7 @@ This follows React's convention where components start with uppercase letters."
             (new-tail (dynamic-attrs-from-pairs tag node-path (cddr attrs) tail)))
         (if (stringp v)
             new-tail
-          `(((list :tag ,tag :name ,(symbol-name k) :value ,v) . ,node-path) . ,new-tail)))
+          `(((list :tag ,tag :name ,(substring (symbol-name k) 1) :value ,v) . ,node-path) . ,new-tail)))
     tail))
 
 (defun esx-collect-dynamic-attrs (nodes node-path tail)
@@ -145,20 +145,21 @@ This follows React's convention where components start with uppercase letters."
 
 
 (defun build-vnodes (nodes)
-  (with-id-counter
-   (lambda ()
-     (let ((dyn-nodes (esx-collect-dynamic-nodes nodes '(0) '()))
-           (dyn-attrs (esx-collect-dynamic-attrs nodes '(0) '()))
-           (path-mapper (lambda (item) (vconcat (reverse (cdr item))))))
-       (list
-        'list
-         (register-template
-          (list
-           :roots (vconcat (esx-create-template-nodes nodes))
-           :node-paths (vconcat (mapcar path-mapper dyn-nodes))
-           :attr-paths (vconcat (mapcar path-mapper dyn-attrs))))
-        `(vector ,@(mapcar #'car dyn-nodes))
-        `(vector ,@(mapcar #'car dyn-attrs)))))))
+  (and nodes
+       (with-id-counter
+        (lambda ()
+          (let ((dyn-nodes (esx-collect-dynamic-nodes nodes '(0) '()))
+                (dyn-attrs (esx-collect-dynamic-attrs nodes '(0) '()))
+                (path-mapper (lambda (item) (vconcat (reverse (cdr item))))))
+            (list
+             'list
+             (register-template
+              (list
+               :roots (vconcat (esx-create-template-nodes nodes))
+               :node-paths (vconcat (mapcar path-mapper dyn-nodes))
+               :attr-paths (vconcat (mapcar path-mapper dyn-attrs))))
+             `(vector ,@(mapcar #'car dyn-nodes))
+             `(vector ,@(mapcar #'car dyn-attrs))))))))
 
 (defun build-vnodes-2 (nodes)
   (with-id-counter
@@ -179,8 +180,7 @@ This follows React's convention where components start with uppercase letters."
                                (error-message-string err)))))))))
 
 (defun handle-render (buffer-name)
-  (let ((content (reed-render-immediate buffer-name)))
-    (message "[handle-render] %s" content)
-    (with-current-buffer (get-buffer-create buffer-name)
+  (with-current-buffer (get-buffer-create buffer-name)
+    (let ((content (reed-render-immediate buffer-name)))
       (erase-buffer)
       (insert content))))

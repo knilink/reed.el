@@ -1,3 +1,4 @@
+mod events;
 mod globals;
 mod hooks;
 mod managed_global_ref;
@@ -13,6 +14,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use emacs::{Env, Result, Value, Vector, defun};
+use managed_global_ref::ManagedGlobalRef;
 use taffy::{
     CompactLength,
     style_helpers::{FromLength, FromPercent, TaffyAuto, TaffyZero},
@@ -84,11 +86,11 @@ fn clear_rendering_contexts<'e>(env: &'e Env) -> Result<()> {
 }
 
 #[defun]
-fn set_width<'e>(_: &'e Env, name: String, value: i64) -> Result<()> {
+fn set_width<'e>(_: &'e Env, name: String, value: usize) -> Result<()> {
     RENDERING_CONTEXTS.with(|contexts| {
         let mut ctxs = contexts.borrow_mut();
         let ctx = ctxs.get_mut(&name).unwrap();
-        ctx.set_width(value as f32);
+        ctx.set_width(value);
     });
     Ok(())
 }
@@ -115,4 +117,21 @@ fn taffy_length<'e>(_: &'e Env, unit: Value, value: Value) -> Result<String> {
         Some(Err(err)) => Err(err.into()),
         None => Err(emacs::Error::msg(format!("unknown unit {}", unit_name))),
     }
+}
+
+#[defun]
+fn handle_event<'e>(
+    env: &'e Env,
+    name: String,
+    position: usize,
+    event_payload: Value,
+) -> Result<()> {
+    CURRENT_EMACS_ENV.set(env, || {
+        RENDERING_CONTEXTS.with(|contexts| {
+            let mut ctxs = contexts.borrow_mut();
+            let ctx = ctxs.get_mut(&name).unwrap();
+            ctx.handle_cursor_event(position, ManagedGlobalRef::from(event_payload));
+        });
+    });
+    Ok(())
 }

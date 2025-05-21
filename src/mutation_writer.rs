@@ -1,10 +1,10 @@
+use crate::events::TuiEventManager;
 use crate::rendering_context::{
     BoxNodeContext, ErrorMessageContext, TextBoxLeafContext, TextLeafContext, TextNodeContext,
     TextTreeRootContext, TuiNodeContext,
 };
 use dioxus_core::{AttributeValue, ElementId, Template, TemplateNode};
 use std::borrow::Cow;
-use std::collections::HashSet;
 use taffy::prelude::{NodeId, TaffyTree};
 use taffy::{Style, TaffyResult};
 
@@ -33,7 +33,7 @@ pub struct MutationWriter<'a> {
     pub doc: &'a mut TaffyTree<TuiNodeContext>,
     // pub root_id: NodeId,
     pub state: &'a mut DioxusState,
-    pub event_listeners: &'a mut HashSet<(&'static str, ElementId)>,
+    pub event_manager: &'a mut TuiEventManager,
 }
 
 impl MutationWriter<'_> {
@@ -200,7 +200,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         );
 
         let new_style: Option<Style> = match name {
-            ":style" => match value {
+            "style" => match value {
                 AttributeValue::Text(value) => Some(serde_lexpr::from_str(&value).unwrap()),
                 _ => None,
             },
@@ -224,11 +224,11 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
-        self.event_listeners.insert((name, id));
+        self.event_manager.create_event_listener(name, id);
     }
 
     fn remove_event_listener(&mut self, name: &'static str, id: ElementId) {
-        self.event_listeners.remove(&(name, id));
+        self.event_manager.remove_event_listener(name, id);
     }
 
     fn remove_node(&mut self, id: ElementId) {
@@ -313,7 +313,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 } = attr
                 {
                     match *name {
-                        ":style" => {
+                        "style" => {
                             style = Some(serde_lexpr::from_str(&value).unwrap());
                         }
                         _ => {}
@@ -332,6 +332,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 "span" => TuiNodeContext::Text(TextNodeContext {}),
                 // error
                 "error" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),
+                "pre" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),
                 _ => panic!("unknown tag: {:?}", tag),
             };
 
