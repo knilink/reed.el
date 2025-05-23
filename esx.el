@@ -7,6 +7,10 @@ This follows React's convention where components start with uppercase letters."
     (and (not (string-empty-p name))
          (<= ?a (aref name 0) ?z))))
 
+(defun attr-symbol-p (symbol)
+  (and (symbolp symbol)
+       (string-prefix-p ":" (symbol-name symbol))))
+
 (defvar counter-stack '())
 
 (defun esx-next-dynamic-node-id ()
@@ -70,16 +74,16 @@ This follows React's convention where components start with uppercase letters."
 (defun esx-create-element-attr-template (element-tag attrs)
   (and
    attrs
-   (let ((k (car attrs))
-         (v (cadr attrs)))
+   (let ((k (caar attrs))
+         (v (cdar attrs)))
      (cons
       (cond
        ((stringp v) `(template-attribute:static
                       :element-tag ,element-tag
-                      :name ,(substring (symbol-name k) 1)
+                      :name ,(symbol-name k)
                       :value ,v))
        (t `(template-attribute:dynamic :id ,(esx-next-dynamic-attr-id))))
-      (esx-create-element-attr-template element-tag (cddr attrs))))))
+      (esx-create-element-attr-template element-tag (cdr attrs))))))
 
 
 (defun esx-collect-dynamic-nodes (nodes node-path tail)
@@ -106,12 +110,12 @@ This follows React's convention where components start with uppercase letters."
 
 (defun dynamic-attrs-from-pairs (tag node-path attrs tail)
   (if attrs
-      (let ((k (car attrs))
-            (v (cadr attrs))
-            (new-tail (dynamic-attrs-from-pairs tag node-path (cddr attrs) tail)))
+      (let ((k (caar attrs))
+            (v (cdar attrs))
+            (new-tail (dynamic-attrs-from-pairs tag node-path (cdr attrs) tail)))
         (if (stringp v)
             new-tail
-          `(((list :tag ,tag :name ,(substring (symbol-name k) 1) :value ,v) . ,node-path) . ,new-tail)))
+          `(((list :tag ,tag :name ,(symbol-name k) :value ,v) . ,node-path) . ,new-tail)))
     tail))
 
 (defun esx-collect-dynamic-attrs (nodes node-path tail)
@@ -134,13 +138,15 @@ This follows React's convention where components start with uppercase letters."
            (t new-tail)))))))
 
 
+(defvar register-template-debug nil)
+
 (defun register-template (template)
-  (or
-   nil
-   (reed-register-template
-    (plist-get template :roots)
-    (plist-get template :node-paths)
-    (plist-get template :attr-paths))))
+  (if register-template-debug
+      `(list ,@template)
+    (reed-register-template
+     (plist-get template :roots)
+     (plist-get template :node-paths)
+     (plist-get template :attr-paths))))
 
 
 
@@ -161,13 +167,39 @@ This follows React's convention where components start with uppercase letters."
              `(vector ,@(mapcar #'car dyn-nodes))
              `(vector ,@(mapcar #'car dyn-attrs))))))))
 
+(defun normalize-syntax-node-attrs (node-attrs)
+  (cond
+   ((not node-attrs) '(()))
+   ((attr-symbol-p (car node-attrs))
+    (let ((res (normalize-syntax-node-attrs (cddr node-attrs))))
+      (cons
+       (cons
+        (cons (intern (substring (symbol-name (car node-attrs)) 1))
+              (cadr node-attrs))
+        (car res))
+       (cdr res))
+      ))
+   (t (cons '() (normalize-syntax node-attrs)))))
+
+(defun normalize-syntax (nodes)
+  (and
+   nodes
+   (let ((node (car nodes))
+         (res (normalize-syntax (cdr nodes))))
+     (cons (if (or (not (listp node)) (eq (car node) '{}))
+               node
+             (cons (car node)
+                   (normalize-syntax-node-attrs (cdr node))))
+           res))))
+
 (defun build-vnodes-2 (nodes)
   (with-id-counter
    (esx-create-template-nodes nodes)))
 
+
 (defmacro esx! (&rest body)
   "Process ESX syntax into static template, dynamic nodes, and dynamic attributes."
-  (build-vnodes body))
+  (build-vnodes (normalize-syntax body)))
 
 (defmacro fc! (component-name props &rest body)
   `(defun ,component-name ,props
