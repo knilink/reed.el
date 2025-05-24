@@ -216,3 +216,25 @@ This follows React's convention where components start with uppercase letters."
     (let ((content (reed-render-immediate buffer-name)))
       (erase-buffer)
       (insert content))))
+
+
+(defun use-callback (callback)
+  (let ((hook (reed-hooks-use-hook
+               (lambda ()
+                 (let ((cb nil))
+                   (cons
+                    (lambda (new-cb)
+                      (setq cb new-cb))
+                    (lambda (&rest args)
+                      (apply cb args))))))))
+    (funcall (car hook) callback)
+    (cdr hook)))
+
+(defun use-ref (init)
+  (reed-hooks-use-hook
+   (lambda ()
+     (let ((current (funcall init)))
+       (lambda (&rest args)
+         (if args
+             (setq current (car args))
+           current))))))

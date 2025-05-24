@@ -5,6 +5,47 @@ use dioxus_signals::Writable;
 use emacs::{Env, IntoLisp, Result, Value, defun};
 
 #[defun]
+fn use_hook<'e>(env: &'e Env, initializer: Value) -> Result<Value<'e>> {
+    let value_ref = dioxus_core::use_hook(|| ManagedGlobalRef::from(initializer.call([]).unwrap()));
+    let res = env.call("identity", [value_ref.bind(env)]);
+    res
+}
+
+#[defun]
+fn use_hook_with_cleanup<'e>(
+    env: &'e Env,
+    initializer: Value,
+    cleanup: Value,
+) -> Result<Value<'e>> {
+    let cleanup_ref = ManagedGlobalRef::from(cleanup);
+    let value_ref = dioxus_core::prelude::use_hook_with_cleanup(
+        || ManagedGlobalRef::from(initializer.call([]).unwrap()),
+        move |value_ref| {
+            CURRENT_EMACS_ENV.with(|env| {
+                cleanup_ref
+                    .as_ref()
+                    .call(env, [value_ref.bind(env)])
+                    .unwrap();
+            })
+        },
+    );
+    env.call("identity", [value_ref.bind(env)])
+}
+
+// #[defun]
+// fn use_memo<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
+//     let init_ref = ManagedGlobalRef::from(init);
+//     let value_ref_memo = CURRENT_EMACS_ENV.set(env, || {
+//         dioxus_hooks::use_memo(move || {
+//             CURRENT_EMACS_ENV
+//                 .with(|env| ManagedGlobalRef::from(init_ref.as_ref().call(env, []).unwrap()))
+//         })
+//     });
+//     let value_ref = value_ref_memo.read();
+//     env.call("identity", [value_ref.bind(env)])
+// }
+
+#[defun]
 fn use_signal<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
     let res = CURRENT_EMACS_ENV.set(env, || {
         SIGNAL_TABLES.with(|signal_tables| {

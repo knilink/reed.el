@@ -18,14 +18,15 @@
 
 
 (fc! App ()
-     (let ((foo "foo quer\n")
+     (let* ((foo "foo quer\n")
            (flag (reed-hooks-use-signal (lambda () nil)))
            (counter (reed-hooks-use-signal (lambda () 0)))
-           (hovering (reed-hooks-use-signal (lambda () nil))))
+           (hovering (reed-hooks-use-signal (lambda () nil)))
+           (handle-timer (use-callback (lambda (&rest args) (reed-hooks-signal-set flag t)))))
        (reed-hooks-use-effect
         (lambda ()
           (message "use effect cb")
-          (run-with-timer 1 nil (lambda () (reed-hooks-signal-set flag t)))))
+          (run-with-timer 1 nil handle-timer)))
        (message "(reed-hooks-signal-get flag) %s" (reed-hooks-signal-get flag))
        (esx!
         (div
