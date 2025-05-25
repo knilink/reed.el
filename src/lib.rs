@@ -7,7 +7,7 @@ mod rendering_context;
 mod template;
 mod utils;
 mod wrapper_components;
-use crate::globals::CURRENT_EMACS_ENV;
+use crate::globals::{CURRENT_EMACS_ENV, take_elisp_error};
 use crate::rendering_context::RenderingContext;
 use crate::template::register;
 use std::cell::RefCell;
@@ -133,5 +133,8 @@ fn handle_event<'e>(
             ctx.handle_cursor_event(position, ManagedGlobalRef::from(event_payload));
         });
     });
-    Ok(())
+    match take_elisp_error() {
+        None => Ok(()),
+        Some(e) => Err(e),
+    }
 }

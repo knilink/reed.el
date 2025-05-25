@@ -1,11 +1,12 @@
 use crate::globals::{
     CURRENT_EMACS_ENV, ROOT_COMPONENT, SIGNAL_TABLES, SignalTable, TEMPLATE_REGISTRY,
+    set_elisp_error,
 };
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
 use dioxus_core::{Element, IntoDynNode, fc_to_builder};
 use dioxus_core_macro::{Props, component};
-use emacs::{IntoLisp, Value, Vector};
+use emacs::{Value, Vector};
 
 fn build_element(vnode: Value) -> Element {
     let mut cur = vnode;
@@ -89,7 +90,9 @@ fn build_attr_value(value: Value) -> dioxus_core::AttributeValue {
         let callback_ref = ManagedGlobalRef::from(value);
         dioxus_core::AttributeValue::listener(move |e: dioxus_core::Event<ManagedGlobalRef>| {
             CURRENT_EMACS_ENV.with(|env| {
-                callback_ref.as_ref().call(env, [e.data.bind(env)]).unwrap();
+                if let Err(e) = callback_ref.as_ref().call(env, [e.data.bind(env)]) {
+                    set_elisp_error(e);
+                }
             });
         })
     } else {
@@ -129,7 +132,7 @@ fn build_dynamic_attrs(attrs: Vector) -> Vec<Box<[dioxus_core::Attribute]>> {
 // fn error_message_element(message: String) -> Element {
 //     dioxus_core::Element::Ok({
 //         let __dynamic_nodes: [dioxus_core::DynamicNode; 1usize] =
-//             [dioxus_core::DynamicNode::Text(VText { value: message })];
+//             [dioxus_core::DynamicNode::Text(dioxus_core::VText { value: message })];
 //
 //         static __TEMPLATE_ROOTS: &[dioxus_core::TemplateNode] =
 //             &[dioxus_core::TemplateNode::Element {
@@ -178,8 +181,15 @@ pub fn WrapperComponent(component_ref: ManagedGlobalRef, props_ref: ManagedGloba
     });
 
     CURRENT_EMACS_ENV.with(|env| {
-        let element = env
-            .call(component_ref.bind(env), [props_ref.bind(env)])
+        // let element = match component_ref.as_ref().call(env, [props_ref.bind(env)]) {
+        //     Ok(element) => element,
+        //     Err(err) => {
+        //         return error_message_element(err.to_string());
+        //     }
+        // };
+        let element = component_ref
+            .as_ref()
+            .call(env, [props_ref.bind(env)])
             .unwrap();
         build_element(element)
     })

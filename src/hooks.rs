@@ -12,6 +12,17 @@ fn use_hook<'e>(env: &'e Env, initializer: Value) -> Result<Value<'e>> {
 }
 
 #[defun]
+fn use_drop<'e>(_: &'e Env, destroy: Value) -> Result<()> {
+    let destroy_ref = ManagedGlobalRef::from(destroy);
+    dioxus_core::prelude::use_drop(move || {
+        CURRENT_EMACS_ENV.with(|env| {
+            destroy_ref.as_ref().call(env, []).unwrap();
+        })
+    });
+    Ok(())
+}
+
+#[defun]
 fn use_hook_with_cleanup<'e>(
     env: &'e Env,
     initializer: Value,

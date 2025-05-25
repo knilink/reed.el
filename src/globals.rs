@@ -71,4 +71,17 @@ scoped_thread_local! {
 thread_local! {
     pub static SIGNAL_TABLES: RefCell<HashMap<ScopeId, SignalTable>> = RefCell::new(HashMap::new());
     pub static TEMPLATE_REGISTRY: RefCell<Vec<dioxus_core::Template>> = RefCell::new(Vec::new());
+    pub static LAST_ELISP_ERROR: RefCell<Option<emacs::Error>> = RefCell::new(None);
+}
+
+// Store an error in thread-local storage
+pub fn set_elisp_error(err: emacs::Error) {
+    LAST_ELISP_ERROR.with(|e| {
+        *e.borrow_mut() = Some(err);
+    });
+}
+
+// Retrieve and clear the last error
+pub fn take_elisp_error() -> Option<emacs::Error> {
+    LAST_ELISP_ERROR.with(|e| e.borrow_mut().take())
 }

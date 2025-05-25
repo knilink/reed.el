@@ -201,15 +201,18 @@ This follows React's convention where components start with uppercase letters."
   "Process ESX syntax into static template, dynamic nodes, and dynamic attributes."
   (build-vnodes (normalize-syntax body)))
 
+
+(defun error-element (component-name err-string)
+  (esx!
+   (error
+    ({} (format "[%s] %s" component-name err-string)))))
+
 (defmacro fc! (component-name props &rest body)
   `(defun ,component-name ,props
      (condition-case err
          (progn ,@body)
        (error
-        (esx!
-         (error () ({} (format "[%s] %s"
-                               (symbol-name #',component-name)
-                               (error-message-string err)))))))))
+        (error-element (symbol-name #',component-name) (error-message-string err))))))
 
 (defun handle-render (buffer-name)
   (with-current-buffer (get-buffer-create buffer-name)
