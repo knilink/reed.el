@@ -96,7 +96,7 @@ This follows React's convention where components start with uppercase letters."
 (defun esx-collect-dynamic-nodes (nodes node-path tail)
   (if (not nodes) tail
     (let ((node (car nodes)))
-      (if (or (not node) (not (listp node)))
+      (if (or (not node) (not (listp node))) ; TODO maybe allow symbol
           (esx-collect-dynamic-nodes (cdr nodes) (cons (1+ (car node-path)) (cdr node-path)) tail)
         (let ((tag (car node))
               (new-tail (esx-collect-dynamic-nodes
@@ -104,7 +104,6 @@ This follows React's convention where components start with uppercase letters."
                          (cons (1+ (car node-path)) (cdr node-path))
                          tail)))
           (cond
-           ; TODO
            ((eq tag '{}) `(((list 'dynamic-node:element . ,(cdr node)) . ,node-path) . ,new-tail))
            ((and (symbolp tag) (element-tag-p tag))
             (esx-collect-dynamic-nodes
@@ -114,7 +113,7 @@ This follows React's convention where components start with uppercase letters."
            (t `(((list 'dynamic-node:component
                        :type #',tag
                        :props (list
-                               ,@(mapcar (lambda (pair) `(cons ,(car pair) ,(cdr pair))) (cadr node))
+                               ,@(mapcar (lambda (pair) `(cons ',(car pair) ,(cdr pair))) (cadr node))
                                (cons 'children ,(build-vnodes (cddr node)))))
                  . ,node-path)
                 . ,new-tail))))))))
