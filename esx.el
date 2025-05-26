@@ -104,7 +104,10 @@ This follows React's convention where components start with uppercase letters."
              (cons 0 node-path)
              new-tail))
            (t `(((list 'dynamic-node:component
-                        :type #',tag :props (list ,@(cadr node) :children ,(build-vnodes (cddr node))))
+                       :type #',tag
+                       :props (list
+                               ,@(mapcar (lambda (pair) `(cons ,(car pair) ,(cdr pair))) (cadr node))
+                               (cons children ,(build-vnodes (cddr node)))))
                  . ,node-path)
                 . ,new-tail))))))))
 
