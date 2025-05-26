@@ -107,7 +107,7 @@ This follows React's convention where components start with uppercase letters."
                        :type #',tag
                        :props (list
                                ,@(mapcar (lambda (pair) `(cons ,(car pair) ,(cdr pair))) (cadr node))
-                               (cons children ,(build-vnodes (cddr node)))))
+                               (cons 'children ,(build-vnodes (cddr node)))))
                  . ,node-path)
                 . ,new-tail))))))))
 
@@ -210,10 +210,21 @@ This follows React's convention where components start with uppercase letters."
    (error
     ({} (format "[%s] %s" component-name err-string)))))
 
-(defmacro fc! (component-name props &rest body)
-  `(defun ,component-name ,props
+
+(defun generate-props-bindings  (props-list prop-name)
+  (and
+   props-list
+   (if (attr-symbol-p (car props-list))
+       `((,(cadr props-list) (alist-get ',(intern (substring (symbol-name (car props-list)) 1)) ,prop-name))
+         . ,(generate-props-bindings (cddr props-list) prop-name))
+     `((,(car props-list) (alist-get ',(car props-list) ,prop-name))
+       . ,(generate-props-bindings (cdr props-list) prop-name)))))
+
+(defmacro fc! (component-name props-list &rest body)
+  `(defun ,component-name (&optional props) ; optional, for root component workaround
      (condition-case err
-         (progn ,@body)
+         (let ,(generate-props-bindings props-list 'props)
+           (progn ,@body))
        (error
         (error-element (symbol-name #',component-name) (error-message-string err))))))
 
