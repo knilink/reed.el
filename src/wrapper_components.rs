@@ -8,8 +8,34 @@ use dioxus_core::{Element, IntoDynNode, fc_to_builder};
 use dioxus_core_macro::{Props, component};
 use emacs::{Value, Vector};
 
+struct ListIter<'a> {
+    list: Value<'a>,
+}
+
+impl<'a> Iterator for ListIter<'a> {
+    type Item = Value<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.list.is_not_nil() {
+            let a = self.list.car().unwrap();
+            self.list = self.list.cdr().unwrap();
+            a
+        } else {
+            None
+        }
+    }
+}
+
 fn build_element(vnode: Value) -> Element {
     let mut cur = vnode;
+    let key: Option<String> = {
+        let key: Value = cur.car().unwrap();
+        if key.is_not_nil() {
+            Some(key.into_rust::<String>().unwrap())
+        } else {
+            None
+        }
+    };
+    cur = cur.cdr().unwrap();
     let template_id: usize = cur.car().unwrap();
     cur = cur.cdr().unwrap();
     let dynamic_nodes: Vector = cur.car().unwrap();
@@ -21,7 +47,7 @@ fn build_element(vnode: Value) -> Element {
         registry[template_id]
     });
     dioxus_core::Element::Ok(dioxus_core::VNode::new(
-        None,
+        key,
         template,
         build_dynamic_nodes(dynamic_nodes).into_boxed_slice(),
         build_dynamic_attrs(dynamic_attrs).into_boxed_slice(),
@@ -59,9 +85,16 @@ fn build_dynamic_nodes(nodes: Vector) -> Vec<dioxus_core::DynamicNode> {
                         ele.into_dyn_node()
                     } else if let Ok(ele) = element.into_rust::<i64>() {
                         ele.to_string().into_dyn_node()
+                    } else if let Ok(first) = element.car::<Value>() {
+                        if first.is_not_nil() && first.into_rust::<String>().is_ok() {
+                            build_element(element).into_dyn_node()
+                        } else {
+                            let iter = ListIter { list: element };
+                            iter.map(|item| build_element(item)).into_dyn_node()
+                        }
                     } else {
-                        // dioxus_elements::events::onclick::call_with_explicit_closure
-                        build_element(element).into_dyn_node()
+                        // {null}
+                        dioxus_core::DynamicNode::default()
                     }
                 }
                 _ => {
@@ -230,7 +263,16 @@ pub fn RootComponent() -> Element {
             let element = root_component_ref.as_ref().call(env, []).unwrap();
 
             let mut cursor = element;
-            let template_id: usize = element.car().unwrap();
+            let key: Option<String> = {
+                let key: Value = cursor.car().unwrap();
+                if key.is_not_nil() {
+                    Some(key.into_rust::<String>().unwrap())
+                } else {
+                    None
+                }
+            };
+            cursor = cursor.cdr().unwrap();
+            let template_id: usize = cursor.car().unwrap();
             cursor = cursor.cdr().unwrap();
             let dynamic_nodes: Vector = cursor.car().unwrap();
             cursor = cursor.cdr().unwrap();
@@ -240,7 +282,7 @@ pub fn RootComponent() -> Element {
                 registry[template_id]
             });
             dioxus_core::Element::Ok(dioxus_core::VNode::new(
-                None,
+                key,
                 template,
                 build_dynamic_nodes(dynamic_nodes).into_boxed_slice(),
                 build_dynamic_attrs(dynamic_attrs).into_boxed_slice(),

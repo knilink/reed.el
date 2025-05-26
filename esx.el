@@ -11,6 +11,9 @@ This follows React's convention where components start with uppercase letters."
   (and (symbolp symbol)
        (string-prefix-p ":" (symbol-name symbol))))
 
+(defun static-attr-value-p (value)
+  (stringp value))
+
 (defvar counter-stack '())
 
 (defun esx-next-dynamic-node-id ()
@@ -76,13 +79,17 @@ This follows React's convention where components start with uppercase letters."
    attrs
    (let ((k (caar attrs))
          (v (cdar attrs)))
-     (cons
+     (append
       (cond
-       ((stringp v) `(template-attribute:static
-                      :element-tag ,element-tag
-                      :name ,(symbol-name k)
-                      :value ,v))
-       (t `(template-attribute:dynamic :id ,(esx-next-dynamic-attr-id))))
+       ((eq k 'key)
+        '())
+       ((static-attr-value-p v)
+        `((template-attribute:static
+           :element-tag ,element-tag
+           :name ,(symbol-name k)
+           :value ,v)))
+       (t
+        `((template-attribute:dynamic :id ,(esx-next-dynamic-attr-id)))))
       (esx-create-element-attr-template element-tag (cdr attrs))))))
 
 
@@ -97,6 +104,7 @@ This follows React's convention where components start with uppercase letters."
                          (cons (1+ (car node-path)) (cdr node-path))
                          tail)))
           (cond
+           ; TODO
            ((eq tag '{}) `(((list 'dynamic-node:element . ,(cdr node)) . ,node-path) . ,new-tail))
            ((and (symbolp tag) (element-tag-p tag))
             (esx-collect-dynamic-nodes
@@ -116,7 +124,10 @@ This follows React's convention where components start with uppercase letters."
       (let ((k (caar attrs))
             (v (cdar attrs))
             (new-tail (dynamic-attrs-from-pairs tag node-path (cdr attrs) tail)))
-        (if (stringp v)
+        (if (or
+             (static-attr-value-p v) ; excluding static attr (string)
+             (eq k 'key) ; excluding key prop
+             )
             new-tail
           `(((list :tag ,tag :name ,(symbol-name k) :value ,v) . ,node-path) . ,new-tail)))
     tail))
@@ -162,6 +173,7 @@ This follows React's convention where components start with uppercase letters."
                 (path-mapper (lambda (item) (vconcat (reverse (cdr item))))))
             (list
              'list
+             (and (consp (car nodes)) (alist-get 'key (cadar nodes))) ; only look for the key prop in the first children, that seems to be how diosux rsx! works
              (register-template
               (list
                :roots (vconcat (esx-create-template-nodes nodes))

@@ -75,7 +75,15 @@
 
 
 
-(reed-register-app "test" #'App)
+(fc! App3 ()
+     (let ((hovering (reed-hooks-use-signal (lambda () nil))))
+       (esx!
+        (p
+         ({} (mapcar (lambda (a) (esx! (span :key a ({} a)))) '("foo" "bar" "baz")))))))
+
+
+
+(reed-register-app "test" #'App3)
 (reed-set-width "test" 105)
 
 (message "First output")
