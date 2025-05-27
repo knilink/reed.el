@@ -1,4 +1,5 @@
 (require 'ert)
+(defvar register-template-debug t)
 
 (defun resolve-path (relative-path)
   (expand-file-name relative-path (file-name-directory load-file-name)))
@@ -13,6 +14,9 @@
 (defun register-template (template)
   `(list ,@template))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; dynamic-attrs-from-pairs
 
 (ert-deftest dynamic-attrs-from-pairs-test-basic ()
   "Test basic attribute processing."
@@ -64,6 +68,9 @@
                    ((list :tag ul :name "d" :value 4))))))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; esx-create-element-attr
+
 (ert-deftest esx-create-element-attr-template-test-all-static ()
   (should (equal (with-reset-counter
                   (esx-create-element-attr-template
@@ -99,3 +106,40 @@
 
 (ert-deftest esx-create-element-attr-template-test-empty ()
   (should (not (esx-create-element-attr-template 'div nil))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; build-vnodes
+
+(ert-deftest build-vnodes-test-static-text ()
+  (with-reset-counter
+   (should (equal (build-vnodes '("text"))
+                  '(list
+                    nil
+                    (list :roots [(template-note:text :text "text")]
+                          :node-paths []
+                          :attr-paths [])
+                    (vector)
+                    (vector))))))
+
+(ert-deftest build-vnodes-test-multi-static-text ()
+  (with-reset-counter
+   (should (equal (build-vnodes '("text-1" "text-2"))
+                  '(list
+                    nil
+                    (list :roots [(template-note:text :text "text-1")
+                                  (template-note:text :text "text-2")]
+                          :node-paths []
+                          :attr-paths [])
+                    (vector)
+                    (vector))))))
+
+(ert-deftest build-vnodes-test-multi-dynamic-value ()
+  (with-reset-counter
+   (should (equal (build-vnodes '({} value))
+                  '(list
+                    nil
+                    (list :roots [(template-note:dynamic :id 0)]
+                          :node-paths [[0]]
+                          :attr-paths [])
+                    (vector (list 'dynamic-node:element value))
+                    (vector))))))

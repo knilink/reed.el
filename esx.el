@@ -172,7 +172,9 @@ This follows React's convention where components start with uppercase letters."
                 (path-mapper (lambda (item) (vconcat (reverse (cdr item))))))
             (list
              'list
-             (and (consp (car nodes)) (alist-get 'key (cadar nodes))) ; only look for the key prop in the first children, that seems to be how diosux rsx! works
+             (and (consp (car nodes))
+                  (not (eq (caar nodes) '{}))
+                  (alist-get 'key (cadar nodes))) ; only look for the key prop in the first children, that seems to be how diosux rsx! works
              (register-template
               (list
                :roots (vconcat (esx-create-template-nodes nodes))
