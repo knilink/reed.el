@@ -179,13 +179,13 @@ impl Canvas {
         }
     }
 
-    pub fn draw_border(&mut self, layout: &Layout) {
-        let content_left = layout.content_box_x() as usize;
-        let content_top = layout.content_box_y() as usize;
+    pub fn draw_border(&mut self, parent_x: usize, parent_y: usize, layout: &Layout) {
+        let content_left = layout.content_box_x() as usize + parent_x;
+        let content_top = layout.content_box_y() as usize + parent_y;
         let content_right = content_left + (layout.content_box_width() as usize); //.saturating_sub(1);
         let content_bottom = content_top + (layout.content_box_height() as usize); //.saturating_sub(1);
-        let left = layout.location.x as usize;
-        let top = layout.location.y as usize;
+        let left = layout.location.x as usize + parent_x;
+        let top = layout.location.y as usize + parent_y;
         let right = left + (layout.size.width as usize); //.saturating_sub(1);
         let bottom = top + (layout.size.height as usize); //.saturating_sub(1);
         let mut chars = "│─│─┌┐┘└".chars();
@@ -411,7 +411,16 @@ impl RenderingContext {
         let iterator = TaffyTreeIterator::new(&self.doc, self.root_id);
         for node in iterator {
             if let Ok(layout) = self.doc.layout(node) {
-                canvas.draw_border(layout);
+                let mut parent_x = 0;
+                let mut parent_y = 0;
+                let mut current_ancestor = node;
+                while let Some(next_ancestor) = self.doc.parent(current_ancestor) {
+                    current_ancestor = next_ancestor;
+                    let layout = self.doc.layout(current_ancestor).unwrap();
+                    parent_x += layout.location.x as usize;
+                    parent_y += layout.location.y as usize;
+                }
+                canvas.draw_border(parent_x, parent_y, layout);
             }
         }
 
