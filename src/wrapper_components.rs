@@ -85,6 +85,9 @@ fn build_dynamic_nodes(nodes: Vector) -> Vec<dioxus_core::DynamicNode> {
                         ele.into_dyn_node()
                     } else if let Ok(ele) = element.into_rust::<i64>() {
                         ele.to_string().into_dyn_node()
+                    } else if !element.is_not_nil() {
+                        // {null}
+                        dioxus_core::DynamicNode::default()
                     } else if let Ok(first) = element.car::<Value>() {
                         if !first.is_not_nil() || first.into_rust::<String>().is_ok() {
                             build_element(element).into_dyn_node()
@@ -93,7 +96,6 @@ fn build_dynamic_nodes(nodes: Vector) -> Vec<dioxus_core::DynamicNode> {
                             iter.map(|item| build_element(item)).into_dyn_node()
                         }
                     } else {
-                        // {null}
                         dioxus_core::DynamicNode::default()
                     }
                 }
