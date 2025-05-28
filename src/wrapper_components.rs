@@ -86,7 +86,7 @@ fn build_dynamic_nodes(nodes: Vector) -> Vec<dioxus_core::DynamicNode> {
                     } else if let Ok(ele) = element.into_rust::<i64>() {
                         ele.to_string().into_dyn_node()
                     } else if let Ok(first) = element.car::<Value>() {
-                        if first.is_not_nil() && first.into_rust::<String>().is_ok() {
+                        if !first.is_not_nil() || first.into_rust::<String>().is_ok() {
                             build_element(element).into_dyn_node()
                         } else {
                             let iter = ListIter { list: element };
@@ -139,7 +139,12 @@ fn build_dynamic_attrs(attrs: Vector) -> Vec<Box<[dioxus_core::Attribute]>> {
         .map(|attr| {
             let tag: String = plist_get(attr, ":tag");
             let name: String = plist_get(attr, ":name");
-            let value: dioxus_core::AttributeValue = build_attr_value(plist_get(attr, ":value"));
+            let value: Value = plist_get(attr, ":value");
+            let value: dioxus_core::AttributeValue = if name == "ref" {
+                dioxus_core::AttributeValue::any_value(ManagedGlobalRef::from(value))
+            } else {
+                build_attr_value(plist_get(attr, ":value"))
+            };
             let volatile = tag == "input" && name == "value";
             if value == dioxus_core::AttributeValue::None {
                 #[cfg(feature = "tracing")]

@@ -1,9 +1,12 @@
 use crate::events::TuiEventManager;
+use crate::globals::CURRENT_EMACS_ENV;
+use crate::managed_global_ref::ManagedGlobalRef;
 use crate::rendering_context::{
     BoxNodeContext, ErrorMessageContext, TextBoxLeafContext, TextLeafContext, TextNodeContext,
     TextTreeRootContext, TuiNodeContext,
 };
 use dioxus_core::{AttributeValue, ElementId, Template, TemplateNode};
+use emacs::IntoLisp;
 use std::borrow::Cow;
 use taffy::prelude::{NodeId, TaffyTree};
 use taffy::{Style, TaffyResult};
@@ -64,10 +67,9 @@ impl MutationWriter<'_> {
 
     fn remove_node(&mut self, id: NodeId) -> TaffyResult<NodeId> {
         if let Some(TuiNodeContext::TextBox(ctx)) = self.doc.get_node_context(id) {
-            self.doc.remove(ctx.text_tree_root)
-        } else {
-            self.doc.remove(id)
+            self.doc.remove(ctx.text_tree_root)?;
         }
+        self.doc.remove(id)
     }
 
     fn mark_text_box_dirty(&mut self, text_leaf: NodeId) {
@@ -113,7 +115,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         #[cfg(feature = "tracing")]
         tracing::info!("[create_placeholder] id:{}", id.0);
 
-        // TODO: no context
+        // TODO: None taffy node context
         let node_id = self.doc.new_leaf(Default::default()).unwrap();
         self.set_id_mapping(node_id, id);
         self.state.stack.push(node_id);
@@ -206,6 +208,21 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
             },
             _ => None,
         };
+
+        // TODO should clear ref after unmount
+        if name == "ref" {
+            if let AttributeValue::Any(rc_value) = value {
+                if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
+                    CURRENT_EMACS_ENV.with(|env| {
+                        original
+                            .as_ref()
+                            .call(env, [id.0.into_lisp(env).unwrap()])
+                            .unwrap();
+                    });
+                }
+            }
+        };
+
         if let Some(new_style) = new_style {
             self.doc.set_style(node_id, new_style).unwrap();
         }

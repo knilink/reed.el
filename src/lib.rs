@@ -13,7 +13,7 @@ use crate::template::register;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use emacs::{Env, Result, Value, Vector, defun};
+use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
 use managed_global_ref::ManagedGlobalRef;
 use taffy::{
     CompactLength,
@@ -70,7 +70,11 @@ fn render_immediate<'e>(env: &'e Env, name: String) -> Result<String> {
         RENDERING_CONTEXTS.with(|contexts| {
             let mut ctxs = contexts.borrow_mut();
             let ctx = ctxs.get_mut(&name).unwrap();
-            Ok(ctx.render())
+            let res = ctx.render();
+            match take_elisp_error() {
+                None => Ok(res),
+                Some(e) => Err(e),
+            }
         })
     })
 }
@@ -93,6 +97,16 @@ fn set_width<'e>(_: &'e Env, name: String, value: usize) -> Result<()> {
         ctx.set_width(value);
     });
     Ok(())
+}
+
+#[defun]
+fn get_width<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
+    let maybe_width =
+        RENDERING_CONTEXTS.with(|contexts| contexts.borrow().get(&name).map(|ctx| ctx.get_width()));
+    match maybe_width {
+        Some(width) => width.into_lisp(env),
+        None => ().into_lisp(env),
+    }
 }
 
 #[defun]
@@ -136,5 +150,35 @@ fn handle_event<'e>(
     match take_elisp_error() {
         None => Ok(()),
         Some(e) => Err(e),
+    }
+}
+
+#[defun]
+fn get_layout<'e>(env: &'e Env, name: String, element_id: usize) -> Result<Value<'e>> {
+    let maybe_layout_str = RENDERING_CONTEXTS.with(|contexts| {
+        let ctxs = contexts.borrow();
+        ctxs.get(&name)
+            .map(|ctx| ctx.get_serialized_layout(element_id))
+    });
+    if let Some(layout_str) = maybe_layout_str {
+        let layout_lisp = env.call("read-from-string", [layout_str.into_lisp(env)?])?;
+        layout_lisp.car()
+    } else {
+        ().into_lisp(env)
+    }
+}
+
+#[defun]
+fn get_absolut_location<'e>(env: &'e Env, name: String, element_id: usize) -> Result<Value<'e>> {
+    let maybe_location = RENDERING_CONTEXTS.with(|contexts| {
+        let ctxs = contexts.borrow();
+        ctxs.get(&name)
+            .map(|ctx| ctx.get_absolute_location(element_id))
+            .flatten()
+    });
+    if let Some((x, y)) = maybe_location {
+        env.cons(x, y)
+    } else {
+        ().into_lisp(env)
     }
 }

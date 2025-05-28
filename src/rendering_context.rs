@@ -13,24 +13,31 @@ use taffy::prelude::{
     Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
 };
 
+#[derive(Debug)]
 pub struct TextLeafContext {
     pub text: Cow<'static, str>,
 }
 
+#[derive(Debug)]
 pub struct TextNodeContext {}
 
+#[derive(Debug)]
 pub struct BoxNodeContext {}
 
+#[derive(Debug)]
 pub struct ErrorMessageContext {}
 
+#[derive(Debug)]
 pub struct TextTreeRootContext {
     pub container: NodeId,
 }
 
+#[derive(Debug)]
 pub struct TextBoxLeafContext {
     pub text_tree_root: NodeId,
 }
 
+#[derive(Debug)]
 pub enum TuiNodeContext {
     Box(BoxNodeContext),
     TextBox(TextBoxLeafContext),
@@ -334,6 +341,10 @@ impl RenderingContext {
         );
     }
 
+    pub fn get_width(&self) -> usize {
+        self.window_width
+    }
+
     pub fn render(&mut self) -> String {
         ROOT_COMPONENT.set(&self.root_component_ref, || {
             let mut mutation_writer = MutationWriter {
@@ -381,9 +392,18 @@ impl RenderingContext {
             let layout = self.doc.layout(key).unwrap();
             let width = layout.content_box_width() as usize;
             let lines = textwrap::wrap(value, width);
+            let mut parent_x = 0;
+            let mut parent_y = 0;
+            let mut current_ancestor = key;
+            while let Some(next_ancestor) = self.doc.parent(current_ancestor) {
+                current_ancestor = next_ancestor;
+                let layout = self.doc.layout(current_ancestor).unwrap();
+                parent_x += layout.location.x as usize;
+                parent_y += layout.location.y as usize;
+            }
             canvas.draw_text(
-                layout.content_box_x() as usize,
-                layout.content_box_y() as usize,
+                parent_x + (layout.content_box_x() as usize),
+                parent_y + (layout.content_box_y()) as usize,
                 &lines.iter().map(|l| l.as_ref()).collect::<Vec<_>>(),
             );
         }
@@ -410,5 +430,31 @@ impl RenderingContext {
             ),
             event_payload,
         );
+    }
+
+    pub fn get_serialized_layout(&self, element_id: usize) -> Option<String> {
+        if let Some(node_id) = self.dioxus_state.node_id_mapping[element_id] {
+            Some(serde_lexpr::to_string(self.doc.layout(node_id).unwrap()).unwrap())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_absolute_location(&self, element_id: usize) -> Option<(usize, usize)> {
+        if let Some(node_id) = self.dioxus_state.node_id_mapping[element_id] {
+            let layout = self.doc.layout(node_id).unwrap();
+            let mut x = layout.location.x as usize;
+            let mut y = layout.location.y as usize;
+            let mut current_node_id = node_id;
+            while let Some(parent_node_id) = self.doc.parent(current_node_id) {
+                let layout = self.doc.layout(parent_node_id).unwrap();
+                x += layout.location.x as usize;
+                y += layout.location.y as usize;
+                current_node_id = parent_node_id;
+            }
+            Some((x, y))
+        } else {
+            None
+        }
     }
 }

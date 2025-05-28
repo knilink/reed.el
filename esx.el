@@ -268,3 +268,10 @@ This follows React's convention where components start with uppercase letters."
          (if args
              (setq current (car args))
            current))))))
+
+(defun use-signal (init)
+  (let ((sig (reed-hooks-use-signal init)))
+    (lambda (&rest args)
+      (if args
+          (reed-hooks-signal-set sig (car args))
+        (reed-hooks-signal-get sig)))))

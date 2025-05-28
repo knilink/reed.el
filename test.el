@@ -74,20 +74,48 @@
          ({} (if (reed-hooks-signal-get hovering) "hovering" "not hovering"))))))
 
 
+(fc! Child2 (value children)
+     (message "[children] %s" children)
+     (reed-hooks-use-effect
+      (lambda ()
+        (let ()
+          (run-with-timer
+           0 nil
+           (lambda ()
+             (message "[Child2] begin")
+             (message "[Child2] buffer string" (buffer-string))
+             (message "[Child2] buffer string end")
+             )))))
+     (esx! (p ({} children) ({} value) )))
 
 (fc! App3 ()
-     (let ((hovering (reed-hooks-use-signal (lambda () nil))))
+     (esx!
+      (div
+       (p "ffffffffffffffff\nffffffffffffffff\n")
+       (p "jjjjjjjjjjjjjjjj")
+       ({} (mapcar (lambda (a) (esx! (Child2 :key a :value a ({} "Child2-child")))) '("foo1" "bar2" "baz3"))))))
+
+(fc! App4 ()
+     (let ((flag-sig (use-signal (lambda () nil))))
+       (reed-hooks-use-effect
+        (lambda ()
+          (run-with-timer
+           1 nil
+           (lambda ()
+             (message "ttttttttttttttttim")
+             (funcall flag-sig t)))))
+       (message "[render] app4")
        (esx!
-        (p
-         ({} (mapcar (lambda (a) (esx! (span :key a ({} a)))) '("foo" "bar" "baz")))))))
+        (div
+         ({} (if (funcall flag-sig) (esx! (p "A")) (esx! (p "B"))))))))
 
+(message "[Child2] 3")
 
-
-(reed-register-app "test" #'App3)
+(reed-register-app "test" #'App4)
 (reed-set-width "test" 105)
 
 (message "First output")
-(message "%s" (reed-render-immediate "test"))
+(message "[result/start]\n%s\n[result/end]" (reed-render-immediate "test"))
 
 (run-with-timer
  1 nil

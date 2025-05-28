@@ -1,4 +1,4 @@
-use crate::globals::{CURRENT_EMACS_ENV, SIGNAL_TABLES};
+use crate::globals::{CURRENT_EMACS_ENV, SIGNAL_TABLES, set_elisp_error};
 use crate::managed_global_ref::ManagedGlobalRef;
 use dioxus_core::ScopeId;
 use dioxus_signals::Writable;
@@ -121,7 +121,9 @@ fn use_effect<'e>(_: &'e Env, f: Value) -> Result<()> {
     let f_ref = ManagedGlobalRef::from(f);
     dioxus_hooks::use_effect(move || {
         CURRENT_EMACS_ENV.with(|env| {
-            f_ref.as_ref().call(env, []).unwrap();
+            if let Err(e) = f_ref.as_ref().call(env, []) {
+                set_elisp_error(e);
+            }
         })
     });
     Ok(())
@@ -132,7 +134,9 @@ fn use_after_render<'e>(_: &'e Env, f: Value) -> Result<()> {
     let f_ref = ManagedGlobalRef::from(f);
     dioxus_core::prelude::use_after_render(move || {
         CURRENT_EMACS_ENV.with(|env| {
-            f_ref.as_ref().call(env, []).unwrap();
+            if let Err(e) = f_ref.as_ref().call(env, []) {
+                set_elisp_error(e);
+            }
         })
     });
     Ok(())
