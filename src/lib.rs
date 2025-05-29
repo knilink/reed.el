@@ -13,7 +13,7 @@ use crate::template::register;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use emacs::{Env, IntoLisp, Result, Value, Vector, defun};
+use emacs::{CallEnv, Env, IntoLisp, Result, Value, Vector, defun};
 use managed_global_ref::ManagedGlobalRef;
 use taffy::{
     CompactLength,
@@ -28,7 +28,17 @@ thread_local! {
 emacs::plugin_is_GPL_compatible!();
 
 #[emacs::module(name = "reed")]
-fn init(_: &Env) -> Result<()> {
+fn init(env: &Env) -> Result<()> {
+    fn cleanup(call_env: &CallEnv) -> Result<()> {
+        clear_rendering_contexts(&*call_env)
+    }
+    env.call(
+        "add-hook",
+        [
+            env.intern("kill-emacs-hook")?,
+            emacs::lambda!(env, cleanup, 0..0)?,
+        ],
+    )?;
     Ok(())
 }
 
