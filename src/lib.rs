@@ -144,17 +144,20 @@ fn taffy_length<'e>(_: &'e Env, unit: Value, value: Value) -> Result<String> {
 }
 
 #[defun]
-fn handle_event<'e>(
+fn handle_cursor_event<'e>(
     env: &'e Env,
     name: String,
+    event_name: Value,
     position: usize,
     event_payload: Value,
 ) -> Result<()> {
+    let event_name: Value = env.call("symbol-name", [event_name])?;
+    let event_name: String = event_name.into_rust().unwrap();
     CURRENT_EMACS_ENV.set(env, || {
         RENDERING_CONTEXTS.with(|contexts| {
             let mut ctxs = contexts.borrow_mut();
             let ctx = ctxs.get_mut(&name).unwrap();
-            ctx.handle_cursor_event(position, ManagedGlobalRef::from(event_payload));
+            ctx.handle_cursor_event(event_name, position, ManagedGlobalRef::from(event_payload));
         });
     });
     match take_elisp_error() {

@@ -427,9 +427,15 @@ impl RenderingContext {
         canvas.to_string()
     }
 
-    pub fn handle_cursor_event(&mut self, cursor_pos: usize, event_payload: ManagedGlobalRef) {
+    pub fn handle_cursor_event(
+        &mut self,
+        event_name: String,
+        cursor_pos: usize,
+        event_payload: ManagedGlobalRef,
+    ) {
         let cursor_pos = cursor_pos - 1;
-        self.event_manager.handle_cursor_move(
+        self.event_manager.handle_cursor_event(
+            event_name,
             self.vdom.runtime(),
             &self.doc,
             &self.dioxus_state.node_id_mapping,
