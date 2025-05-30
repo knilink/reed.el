@@ -131,7 +131,7 @@ fn build_attr_value(value: Value) -> dioxus_core::AttributeValue {
             });
         })
     } else {
-        dioxus_core::AttributeValue::None
+        dioxus_core::AttributeValue::any_value(ManagedGlobalRef::from(value))
     }
 }
 

@@ -204,6 +204,23 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         let new_style: Option<Style> = match name {
             "style" => match value {
                 AttributeValue::Text(value) => Some(serde_lexpr::from_str(&value).unwrap()),
+                AttributeValue::Any(rc_value) => {
+                    if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
+                        CURRENT_EMACS_ENV.with(|env| {
+                            let text_value: String = env
+                                .call(
+                                    "prin1-to-string",
+                                    [original.bind(env), true.into_lisp(env).unwrap()],
+                                )
+                                .unwrap()
+                                .into_rust()
+                                .unwrap();
+                            Some(serde_lexpr::from_str(&text_value).unwrap())
+                        })
+                    } else {
+                        None
+                    }
+                }
                 _ => None,
             },
             _ => None,
@@ -241,10 +258,14 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
+        #[cfg(feature = "tracing")]
+        tracing::info!("[create_event_listener] name:{} value:{}", name, id.0);
         self.event_manager.create_event_listener(name, id);
     }
 
     fn remove_event_listener(&mut self, name: &'static str, id: ElementId) {
+        #[cfg(feature = "tracing")]
+        tracing::info!("[remove_event_listener] name:{} value:{}", name, id.0);
         self.event_manager.remove_event_listener(name, id);
     }
 
@@ -254,6 +275,9 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
         let node_id = self.state.element_to_node_id(id);
         self.remove_node(node_id).unwrap();
+        self.state.node_id_mapping[id.0] = None;
+        // dioxus doesn't notify removing listeners when removing element
+        self.event_manager.remove_element(id);
     }
 
     fn push_root(&mut self, id: ElementId) {

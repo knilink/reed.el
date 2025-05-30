@@ -60,26 +60,26 @@ fn use_hook_with_cleanup<'e>(
 
 #[defun]
 fn use_signal<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
-    let res = CURRENT_EMACS_ENV.set(env, || {
-        SIGNAL_TABLES.with(|signal_tables| {
-            let scope_id = dioxus_core::prelude::current_scope_id()?;
-            let init_ref = ManagedGlobalRef::from(init);
-            let signal = dioxus_hooks::use_signal(|| {
-                CURRENT_EMACS_ENV.with(|inner_env| {
-                    let res = init_ref.as_ref().call(inner_env, []).unwrap();
-                    ManagedGlobalRef::from(res)
-                })
-            });
-            let res = signal_tables
-                .borrow_mut()
-                .get_mut(&scope_id)
-                .unwrap()
-                .signal
-                .set(signal);
-            env.call("cons", [scope_id.0.into_lisp(env)?, res.into_lisp(env)?])
+    let scope_id = dioxus_core::prelude::current_scope_id()?;
+    let init_ref = ManagedGlobalRef::from(init);
+    let signal = CURRENT_EMACS_ENV.set(env, || {
+        dioxus_hooks::use_signal(|| {
+            CURRENT_EMACS_ENV.with(|inner_env| {
+                // TODO should propagate this error back to lisp
+                let res = init_ref.as_ref().call(inner_env, []).unwrap();
+                ManagedGlobalRef::from(res)
+            })
         })
     });
-    res
+    SIGNAL_TABLES.with(|signal_tables| {
+        let res = signal_tables
+            .borrow_mut()
+            .get_mut(&scope_id)
+            .unwrap()
+            .signal
+            .set(signal);
+        env.call("cons", [scope_id.0.into_lisp(env)?, res.into_lisp(env)?])
+    })
 }
 
 #[defun]

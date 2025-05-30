@@ -51,9 +51,20 @@ impl TuiEventManager {
             // change: BTreeSet::new(),
             hovering: BTreeSet::new(),
             click: BTreeSet::new(),
-            focusing: None,
+            focusing: BTreeSet::new(),
         }
     }
+
+    pub fn remove_element(&mut self, id: ElementId) {
+        self.hover.remove(&id);
+        self.leave.remove(&id);
+        self.focus.remove(&id);
+        self.blur.remove(&id);
+        self.click.remove(&id);
+        self.hovering.remove(&id);
+        self.focusing.remove(&id);
+    }
+
     pub fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
         match name {
             "hover" => {
