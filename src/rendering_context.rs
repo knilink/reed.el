@@ -472,4 +472,18 @@ impl RenderingContext {
             None
         }
     }
+
+    pub fn emit_event(
+        &self,
+        event_name: String,
+        element_id: dioxus_core::ElementId,
+        event_payload: ManagedGlobalRef,
+        propagates: bool,
+    ) {
+        self.vdom.runtime().handle_event(
+            &event_name,
+            dioxus_core::Event::new(std::rc::Rc::new(event_payload), propagates),
+            element_id,
+        );
+    }
 }

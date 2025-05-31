@@ -195,3 +195,29 @@ fn get_absolut_location<'e>(env: &'e Env, name: String, element_id: usize) -> Re
         ().into_lisp(env)
     }
 }
+
+#[defun]
+fn emit_event<'e>(
+    env: &'e Env,
+    name: String,
+    event_name: Value,
+    element_id: usize,
+    event_payload: Value,
+    propagates: Value,
+) -> Result<()> {
+    let event_name: Value = env.call("symbol-name", [event_name])?;
+    let event_name: String = event_name.into_rust()?;
+    CURRENT_EMACS_ENV.set(env, || {
+        RENDERING_CONTEXTS.with(|contexts| {
+            let ctxs = contexts.borrow();
+            let ctx = ctxs.get(&name).unwrap();
+            ctx.emit_event(
+                event_name,
+                dioxus_core::ElementId(element_id),
+                ManagedGlobalRef::from(event_payload),
+                propagates.is_not_nil(),
+            );
+        });
+    });
+    Ok(())
+}
