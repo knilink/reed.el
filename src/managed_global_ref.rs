@@ -7,6 +7,16 @@ struct GlobalRefHolder {
     global_ref: Option<GlobalRef>,
 }
 
+impl Drop for GlobalRefHolder {
+    fn drop(&mut self) {
+        if let Some(_ref) = self.global_ref.take() {
+            CURRENT_EMACS_ENV.with(|env: &Env| {
+                let _ = _ref.free(env);
+            });
+        }
+    }
+}
+
 pub struct ManagedGlobalRef {
     inner: Arc<GlobalRefHolder>,
 }
