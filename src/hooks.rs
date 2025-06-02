@@ -143,3 +143,18 @@ fn use_after_render<'e>(_: &'e Env, f: Value) -> Result<()> {
     });
     Ok(())
 }
+
+#[defun]
+fn use_context_provider<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
+    let context_ref = dioxus_hooks::use_context_provider(|| {
+        // TODO should propagate this error back to lisp
+        ManagedGlobalRef::from(init.call([]).unwrap())
+    });
+    env.call("identity", [context_ref.bind(env)])
+}
+
+#[defun]
+fn use_context<'e>(env: &'e Env) -> Result<Value<'e>> {
+    let context_ref = dioxus_hooks::use_context::<ManagedGlobalRef>();
+    env.call("identity", [context_ref.bind(env)])
+}
