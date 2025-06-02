@@ -174,6 +174,7 @@ impl Canvas {
     pub fn draw(
         &mut self,
         doc: &TaffyTree<TuiNodeContext>,
+        cached_text_block: &HashMap<NodeId, String>,
         parent_x: usize,
         parent_y: usize,
         id: NodeId,
@@ -181,7 +182,8 @@ impl Canvas {
         let layout = doc.layout(id).unwrap();
         let x = parent_x + layout.location.x as usize;
         let y = parent_y + layout.location.y as usize;
-        if let Some(ctx) = doc.get_node_context(id) {
+        let maybe_ctx = doc.get_node_context(id);
+        if let Some(ctx) = maybe_ctx {
             let face_ref = match ctx {
                 TuiNodeContext::Box(ctx) => ctx.face.clone(),
                 TuiNodeContext::TextBox(ctx) => ctx.face.clone(),
@@ -193,8 +195,8 @@ impl Canvas {
                 let mut i_y = y;
                 while i_y < height + y {
                     self.faces.push((
-                        x + i_y * (self.width + 1) + 1,
-                        x + width + i_y * (self.width + 1) + 1,
+                        self.to_position(x, i_y),
+                        self.to_position(x + width, i_y),
                         face_ref.clone(),
                     ));
                     i_y += 1;
@@ -202,13 +204,33 @@ impl Canvas {
             };
         }
         self.draw_border(parent_x, parent_y, layout);
-        for child_id in doc.children(id).unwrap() {
-            self.draw(doc, x, y, child_id);
+        if let Some(TuiNodeContext::TextBox(ctx)) = maybe_ctx {
+            if let Some(text_content) = cached_text_block.get(&id) {
+                let width: usize = layout.content_box_width() as usize;
+                let wrapped_text = textwrap::wrap(text_content, width);
+                let content_x = parent_x + layout.content_box_x() as usize;
+                let content_y = parent_y + layout.content_box_y() as usize;
+                self.draw_text(content_x, content_y, &wrapped_text);
+                self.draw_text_face(
+                    doc,
+                    ctx.text_tree_root,
+                    &wrapped_text,
+                    parent_x + layout.content_box_x() as usize,
+                    parent_y + layout.content_box_y() as usize,
+                    &mut 0,
+                    &mut 0,
+                    &mut Vec::<ManagedGlobalRef>::new(),
+                )
+            }
+        } else {
+            for child_id in doc.children(id).unwrap() {
+                self.draw(doc, cached_text_block, x, y, child_id);
+            }
         }
     }
 
     /// Draw a multi-line string at the specified position
-    pub fn draw_text(&mut self, x: usize, y: usize, lines: &[&str]) {
+    pub fn draw_text(&mut self, x: usize, y: usize, lines: &Vec<Cow<'_, str>>) {
         for (dy, line) in lines.into_iter().enumerate() {
             let current_y = y + dy;
             if current_y >= self.height {
@@ -221,6 +243,128 @@ impl Canvas {
                     break; // Don't draw beyond canvas width
                 }
                 self.buffer[current_y][current_x] = ch;
+            }
+        }
+    }
+    #[inline]
+    pub fn to_position(&self, x: usize, y: usize) -> usize {
+        // + 1 for position starts from 1
+        // self.width + 1 for trailling line break
+        x + y * (self.width + 1) + 1
+    }
+
+    pub fn draw_text_face(
+        &mut self,
+        doc: &TaffyTree<TuiNodeContext>,
+        node_id: NodeId,
+        wrapped_text: &Vec<Cow<'_, str>>,
+        x: usize,
+        y: usize,
+        cursor_x: &mut usize,
+        cursor_y: &mut usize,
+        face_stack: &mut Vec<ManagedGlobalRef>,
+    ) {
+        if let Some(ctx) = doc.get_node_context(node_id) {
+            match ctx {
+                TuiNodeContext::TextLeaf(ctx) => {
+                    let mut begin = *cursor_x;
+                    let mut maybe_trailling_whitespaces = 0;
+
+                    for char in ctx.text.chars() {
+                        if *cursor_x == 0 && char == ' ' {
+                            continue;
+                        }
+                        if char == ' ' {
+                            maybe_trailling_whitespaces += 1;
+                        } else if char != '\n' {
+                            maybe_trailling_whitespaces = 0;
+                        }
+
+                        if char == '\n' {
+                            *cursor_x -= maybe_trailling_whitespaces;
+                            if *cursor_x > 0 {
+                                let absolute_y = y + *cursor_y;
+                                for face in face_stack.iter() {
+                                    self.faces.push((
+                                        self.to_position(x + begin, absolute_y),
+                                        self.to_position(x + *cursor_x, absolute_y),
+                                        face.clone(),
+                                    ));
+                                }
+                            }
+                            *cursor_x = 0;
+                            *cursor_y += 1;
+                            maybe_trailling_whitespaces = 0;
+                            begin = 0;
+                        } else {
+                            *cursor_x += 1;
+                            if *cursor_x - maybe_trailling_whitespaces
+                                > wrapped_text[*cursor_y].len()
+                            {
+                                let absolute_y = y + *cursor_y;
+                                for face in face_stack.iter() {
+                                    self.faces.push((
+                                        self.to_position(x + begin, absolute_y),
+                                        self.to_position(x + *cursor_x, absolute_y),
+                                        face.clone(),
+                                    ));
+                                }
+                                *cursor_x = 0;
+                                *cursor_y += 1;
+                                maybe_trailling_whitespaces = 0;
+                                begin = 0;
+                            }
+                        };
+                    }
+                }
+                TuiNodeContext::Text(ctx) => {
+                    let maybe_face = ctx.face.clone();
+                    let has_face = maybe_face.is_some();
+                    let begin_x = *cursor_x;
+                    let begin_y = *cursor_y;
+                    if let Some(face) = maybe_face {
+                        face_stack.push(face);
+                    }
+
+                    for child_id in doc.children(node_id).unwrap() {
+                        self.draw_text_face(
+                            doc,
+                            child_id,
+                            wrapped_text,
+                            x,
+                            y,
+                            cursor_x,
+                            cursor_y,
+                            face_stack,
+                        );
+                    }
+
+                    if has_face {
+                        let face = face_stack.pop().unwrap();
+                        self.faces.push((
+                            self.to_position(
+                                if *cursor_y == begin_y { x + begin_x } else { x },
+                                y + *cursor_y,
+                            ),
+                            self.to_position(x + *cursor_x, y + *cursor_y),
+                            face,
+                        ));
+                    }
+                }
+                _ => {
+                    for child_id in doc.children(node_id).unwrap() {
+                        self.draw_text_face(
+                            doc,
+                            child_id,
+                            wrapped_text,
+                            x,
+                            y,
+                            cursor_x,
+                            cursor_y,
+                            face_stack,
+                        );
+                    }
+                }
             }
         }
     }
@@ -438,27 +582,7 @@ impl RenderingContext {
         let layout = self.doc.layout(self.root_id).unwrap();
         let mut canvas = Canvas::new(layout.size.width as usize, layout.size.height as usize);
 
-        for (&key, value) in &text_blocks {
-            let layout = self.doc.layout(key).unwrap();
-            let width = layout.content_box_width() as usize;
-            let lines = textwrap::wrap(value, width);
-            let mut parent_x = 0;
-            let mut parent_y = 0;
-            let mut current_ancestor = key;
-            while let Some(next_ancestor) = self.doc.parent(current_ancestor) {
-                current_ancestor = next_ancestor;
-                let layout = self.doc.layout(current_ancestor).unwrap();
-                parent_x += layout.location.x as usize;
-                parent_y += layout.location.y as usize;
-            }
-            canvas.draw_text(
-                parent_x + (layout.content_box_x() as usize),
-                parent_y + (layout.content_box_y()) as usize,
-                &lines.iter().map(|l| l.as_ref()).collect::<Vec<_>>(),
-            );
-        }
-
-        canvas.draw(&self.doc, 0, 0, self.root_id);
+        canvas.draw(&self.doc, &text_blocks, 0, 0, self.root_id);
 
         (canvas.to_string(), canvas.faces)
     }
