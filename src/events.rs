@@ -2,7 +2,7 @@ use crate::managed_global_ref::ManagedGlobalRef;
 use dioxus_core::{ElementId, Runtime};
 use std::collections::BTreeSet;
 use std::rc::Rc;
-use taffy::prelude::{Layout, NodeId, TaffyTree};
+use taffy::prelude::{NodeId, TaffyTree};
 
 pub struct TuiEventManager {
     hover: BTreeSet<ElementId>,

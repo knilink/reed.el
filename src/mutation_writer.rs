@@ -201,9 +201,12 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
             value
         );
 
-        let new_style: Option<Style> = match name {
+        match name {
             "style" => match value {
-                AttributeValue::Text(value) => Some(serde_lexpr::from_str(&value).unwrap()),
+                AttributeValue::Text(value) => {
+                    let new_style = serde_lexpr::from_str(&value).unwrap();
+                    self.doc.set_style(node_id, new_style).unwrap();
+                }
                 AttributeValue::Any(rc_value) => {
                     if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
                         CURRENT_EMACS_ENV.with(|env| {
@@ -215,34 +218,42 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
                                 .unwrap()
                                 .into_rust()
                                 .unwrap();
-                            Some(serde_lexpr::from_str(&text_value).unwrap())
+                            let new_style = serde_lexpr::from_str(&text_value).unwrap();
+                            self.doc.set_style(node_id, new_style).unwrap();
                         })
-                    } else {
-                        None
                     }
                 }
-                _ => None,
+                _ => {}
             },
-            _ => None,
-        };
-
-        // TODO should clear ref after unmount
-        if name == "ref" {
-            if let AttributeValue::Any(rc_value) = value {
-                if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
-                    CURRENT_EMACS_ENV.with(|env| {
-                        original
-                            .as_ref()
-                            .call(env, [id.0.into_lisp(env).unwrap()])
-                            .unwrap();
-                    });
-                }
+            "ref" => {
+                // TODO should clear ref after unmount
+                if let AttributeValue::Any(rc_value) = value {
+                    if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
+                        CURRENT_EMACS_ENV.with(|env| {
+                            original
+                                .as_ref()
+                                .call(env, [id.0.into_lisp(env).unwrap()])
+                                .unwrap();
+                        });
+                    }
+                };
             }
+            "face" => {
+                if let AttributeValue::Any(rc_value) = value {
+                    if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
+                        if let Some(ctx) = self.doc.get_node_context_mut(node_id) {
+                            match ctx {
+                                TuiNodeContext::Text(ctx) => ctx.face = Some(original.clone()),
+                                TuiNodeContext::Box(ctx) => ctx.face = Some(original.clone()),
+                                TuiNodeContext::TextBox(ctx) => ctx.face = Some(original.clone()),
+                                _ => {}
+                            }
+                        };
+                    }
+                };
+            }
+            _ => {}
         };
-
-        if let Some(new_style) = new_style {
-            self.doc.set_style(node_id, new_style).unwrap();
-        }
     }
 
     fn set_node_text(&mut self, value: &str, id: ElementId) {
@@ -364,13 +375,14 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
 
             let new_context = match *tag {
                 // box
-                "div" => TuiNodeContext::Box(BoxNodeContext {}),
+                "div" => TuiNodeContext::Box(BoxNodeContext { face: None }),
                 // textbox
                 "p" => TuiNodeContext::TextBox(TextBoxLeafContext {
                     text_tree_root: doc.new_leaf(Default::default()).unwrap(),
+                    face: None,
                 }),
                 // text
-                "span" => TuiNodeContext::Text(TextNodeContext {}),
+                "span" => TuiNodeContext::Text(TextNodeContext { face: None }),
                 // error
                 "error" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),
                 "pre" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),

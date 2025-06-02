@@ -18,11 +18,17 @@ pub struct TextLeafContext {
     pub text: Cow<'static, str>,
 }
 
+// span
 #[derive(Debug)]
-pub struct TextNodeContext {}
+pub struct TextNodeContext {
+    pub face: Option<ManagedGlobalRef>,
+}
 
+// div
 #[derive(Debug)]
-pub struct BoxNodeContext {}
+pub struct BoxNodeContext {
+    pub face: Option<ManagedGlobalRef>,
+}
 
 #[derive(Debug)]
 pub struct ErrorMessageContext {}
@@ -32,9 +38,11 @@ pub struct TextTreeRootContext {
     pub container: NodeId,
 }
 
+// p
 #[derive(Debug)]
 pub struct TextBoxLeafContext {
     pub text_tree_root: NodeId,
+    pub face: Option<ManagedGlobalRef>,
 }
 
 #[derive(Debug)]
@@ -149,6 +157,7 @@ pub struct Canvas {
     width: usize,
     height: usize,
     buffer: Vec<Vec<char>>,
+    faces: Vec<(usize, usize, ManagedGlobalRef)>,
 }
 
 impl Canvas {
@@ -158,6 +167,43 @@ impl Canvas {
             width,
             height,
             buffer: vec![vec![' '; width]; height],
+            faces: Vec::new(),
+        }
+    }
+
+    pub fn draw(
+        &mut self,
+        doc: &TaffyTree<TuiNodeContext>,
+        parent_x: usize,
+        parent_y: usize,
+        id: NodeId,
+    ) {
+        let layout = doc.layout(id).unwrap();
+        let x = parent_x + layout.location.x as usize;
+        let y = parent_y + layout.location.y as usize;
+        if let Some(ctx) = doc.get_node_context(id) {
+            let face_ref = match ctx {
+                TuiNodeContext::Box(ctx) => ctx.face.clone(),
+                TuiNodeContext::TextBox(ctx) => ctx.face.clone(),
+                _ => None,
+            };
+            if let Some(face_ref) = face_ref {
+                let width = layout.size.width as usize;
+                let height = layout.size.height as usize;
+                let mut i_y = y;
+                while i_y < height + y {
+                    self.faces.push((
+                        x + i_y * (self.width + 1) + 1,
+                        x + width + i_y * (self.width + 1) + 1,
+                        face_ref.clone(),
+                    ));
+                    i_y += 1;
+                }
+            };
+        }
+        self.draw_border(parent_x, parent_y, layout);
+        for child_id in doc.children(id).unwrap() {
+            self.draw(doc, x, y, child_id);
         }
     }
 
@@ -349,7 +395,7 @@ impl RenderingContext {
         self.window_width
     }
 
-    pub fn render(&mut self) -> String {
+    pub fn render(&mut self) -> (String, Vec<(usize, usize, ManagedGlobalRef)>) {
         ROOT_COMPONENT.set(&self.root_component_ref, || {
             let mut mutation_writer = MutationWriter {
                 doc: &mut self.doc,
@@ -412,23 +458,9 @@ impl RenderingContext {
             );
         }
 
-        let iterator = TaffyTreeIterator::new(&self.doc, self.root_id);
-        for node in iterator {
-            if let Ok(layout) = self.doc.layout(node) {
-                let mut parent_x = 0;
-                let mut parent_y = 0;
-                let mut current_ancestor = node;
-                while let Some(next_ancestor) = self.doc.parent(current_ancestor) {
-                    current_ancestor = next_ancestor;
-                    let layout = self.doc.layout(current_ancestor).unwrap();
-                    parent_x += layout.location.x as usize;
-                    parent_y += layout.location.y as usize;
-                }
-                canvas.draw_border(parent_x, parent_y, layout);
-            }
-        }
+        canvas.draw(&self.doc, 0, 0, self.root_id);
 
-        canvas.to_string()
+        (canvas.to_string(), canvas.faces)
     }
 
     pub fn handle_cursor_event(

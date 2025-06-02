@@ -75,14 +75,31 @@ fn register_app<'e>(env: &'e Env, name: String, root_component: Value) -> Result
 }
 
 #[defun]
-fn render_immediate<'e>(env: &'e Env, name: String) -> Result<String> {
+fn render_immediate<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
     CURRENT_EMACS_ENV.set(env, || {
         RENDERING_CONTEXTS.with(|contexts| {
             let mut ctxs = contexts.borrow_mut();
             let ctx = ctxs.get_mut(&name).unwrap();
-            let res = ctx.render();
+            let (text, faces) = ctx.render();
+
             match take_elisp_error() {
-                None => Ok(res),
+                None => {
+                    let mut faces_lisp = ().into_lisp(env)?;
+                    for (begin, end, face_ref) in faces.iter().rev() {
+                        faces_lisp = env.cons(
+                            env.call(
+                                "list",
+                                [
+                                    begin.into_lisp(env)?,
+                                    end.into_lisp(env)?,
+                                    face_ref.bind(env),
+                                ],
+                            )?,
+                            faces_lisp,
+                        )?;
+                    }
+                    env.cons(text, faces_lisp)
+                }
                 Some(e) => Err(e),
             }
         })

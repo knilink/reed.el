@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::globals::CURRENT_EMACS_ENV;
 
+#[derive(Debug)]
 struct GlobalRefHolder {
     global_ref: Option<GlobalRef>,
 }
@@ -17,6 +18,7 @@ impl Drop for GlobalRefHolder {
     }
 }
 
+#[derive(Debug)]
 pub struct ManagedGlobalRef {
     inner: Arc<GlobalRefHolder>,
 }
