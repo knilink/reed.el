@@ -184,6 +184,10 @@ impl Canvas {
         let content_top = layout.content_box_y() as usize + parent_y;
         let content_right = content_left + (layout.content_box_width() as usize); //.saturating_sub(1);
         let content_bottom = content_top + (layout.content_box_height() as usize); //.saturating_sub(1);
+        let content_left = content_left - layout.padding.left as usize;
+        let content_top = content_top - layout.padding.top as usize;
+        let content_right = content_right + layout.padding.right as usize;
+        let content_bottom = content_bottom + layout.padding.bottom as usize;
         let left = layout.location.x as usize + parent_x;
         let top = layout.location.y as usize + parent_y;
         let right = left + (layout.size.width as usize); //.saturating_sub(1);
