@@ -78,7 +78,7 @@ This follows React's convention where components start with uppercase letters."
   (and
    attrs
    (let ((k (caar attrs))
-         (v (cdar attrs)))
+         (v (macroexpand (cdar attrs))))
      (append
       (cond
        ((eq k 'key)
@@ -121,7 +121,7 @@ This follows React's convention where components start with uppercase letters."
 (defun dynamic-attrs-from-pairs (tag node-path attrs tail)
   (if attrs
       (let ((k (caar attrs))
-            (v (cdar attrs))
+            (v (macroexpand (cdar attrs)))
             (new-tail (dynamic-attrs-from-pairs tag node-path (cdr attrs) tail)))
         (if (or
              (static-attr-value-p v) ; excluding static attr (string)
@@ -241,11 +241,19 @@ This follows React's convention where components start with uppercase letters."
        (error
         (error-element (symbol-name #',component-name) (error-message-string err))))))
 
+(defmacro static-style! (expr)
+  (let ((result (eval expr)))
+    (format "%s" result)))
+
 (defun handle-render (buffer-name)
   (with-current-buffer (get-buffer-create buffer-name)
-    (let ((content (reed-render-immediate buffer-name)))
-      (erase-buffer)
-      (insert content))))
+    (let* ((res (reed-render-immediate buffer-name))
+           (content (car res))
+           (faces (cdr res)))
+      (with-silent-modifications
+        (erase-buffer)
+        (insert content)
+        (mapc (lambda (face) (apply #'add-face-text-property face)) faces)))))
 
 
 (defun use-callback (callback)
@@ -275,3 +283,6 @@ This follows React's convention where components start with uppercase letters."
       (if args
           (reed-hooks-signal-set sig (car args))
         (reed-hooks-signal-get sig)))))
+
+(provide 'reed-esx)
+;;; reed-esx.el ends here
