@@ -271,6 +271,7 @@ impl Canvas {
                     let mut maybe_trailling_whitespaces = 0;
 
                     for char in ctx.text.chars() {
+                        // skip heading whitespace
                         if *cursor_x == 0 && char == ' ' {
                             continue;
                         }

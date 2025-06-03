@@ -241,15 +241,23 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
             "face" => {
                 if let AttributeValue::Any(rc_value) = value {
                     if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
+                        let face = CURRENT_EMACS_ENV.with(|env| {
+                            if original.bind(env).is_not_nil() {
+                                Some(original.clone())
+                            } else {
+                                None
+                            }
+                        });
+
                         if let Some(ctx) = self.doc.get_node_context_mut(node_id) {
                             match ctx {
-                                TuiNodeContext::Text(ctx) => ctx.face = Some(original.clone()),
-                                TuiNodeContext::Box(ctx) => ctx.face = Some(original.clone()),
-                                TuiNodeContext::TextBox(ctx) => ctx.face = Some(original.clone()),
+                                TuiNodeContext::Text(ctx) => ctx.face = face,
+                                TuiNodeContext::Box(ctx) => ctx.face = face,
+                                TuiNodeContext::TextBox(ctx) => ctx.face = face,
                                 _ => {}
-                            }
+                            };
                         };
-                    }
+                    };
                 };
             }
             _ => {}
