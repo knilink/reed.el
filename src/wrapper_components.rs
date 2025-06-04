@@ -1,5 +1,5 @@
 use crate::globals::{
-    CURRENT_EMACS_ENV, ROOT_COMPONENT, SIGNAL_TABLES, SignalTable, TEMPLATE_REGISTRY,
+    CURRENT_EMACS_ENV, MEMO_TABLES, ROOT_COMPONENT, SIGNAL_TABLES, SignalTable, TEMPLATE_REGISTRY,
     set_elisp_error,
 };
 use crate::managed_global_ref::ManagedGlobalRef;
@@ -202,6 +202,10 @@ pub fn WrapperComponent(component_ref: ManagedGlobalRef, props_ref: ManagedGloba
             SIGNAL_TABLES.with(|signal_tabels| {
                 let mut signal_tabels = signal_tabels.borrow_mut();
                 signal_tabels.insert(scope_id, SignalTable::new());
+            });
+            MEMO_TABLES.with(|memo_tabels| {
+                let mut memo_tabels = memo_tabels.borrow_mut();
+                memo_tabels.insert(scope_id, SignalTable::new());
             });
             scope_id
         },

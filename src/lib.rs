@@ -1,3 +1,4 @@
+mod emacs_symbols;
 mod events;
 mod globals;
 mod hooks;

@@ -1,6 +1,6 @@
 use crate::managed_global_ref::ManagedGlobalRef;
 use dioxus_core::ScopeId;
-use dioxus_signals::{Signal, UnsyncStorage};
+use dioxus_signals::{Memo, Signal, UnsyncStorage};
 use emacs::Env;
 use scoped_tls::scoped_thread_local;
 use std::cell::RefCell;
@@ -44,14 +44,14 @@ impl<T> HandleTable<T> {
     }
 }
 
-pub struct SignalTable {
-    pub signal: HandleTable<Signal<ManagedGlobalRef, UnsyncStorage>>,
+pub struct SignalTable<T> {
+    pub signal: HandleTable<T>,
 }
 
-impl SignalTable {
+impl<T> SignalTable<T> {
     pub fn new() -> Self {
         Self {
-            signal: HandleTable::<Signal<ManagedGlobalRef, UnsyncStorage>>::new(),
+            signal: HandleTable::<T>::new(),
         }
     }
 
@@ -69,7 +69,8 @@ scoped_thread_local! {
 }
 
 thread_local! {
-    pub static SIGNAL_TABLES: RefCell<HashMap<ScopeId, SignalTable>> = RefCell::new(HashMap::new());
+    pub static SIGNAL_TABLES: RefCell<HashMap<ScopeId, SignalTable<Signal<ManagedGlobalRef, UnsyncStorage>>>> = RefCell::new(HashMap::new());
+    pub static MEMO_TABLES: RefCell<HashMap<ScopeId, SignalTable<Memo<ManagedGlobalRef>>>> = RefCell::new(HashMap::new());
     pub static TEMPLATE_REGISTRY: RefCell<Vec<dioxus_core::Template>> = RefCell::new(Vec::new());
     pub static LAST_ELISP_ERROR: RefCell<Option<emacs::Error>> = RefCell::new(None);
 }

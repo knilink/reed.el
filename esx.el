@@ -218,10 +218,9 @@ This follows React's convention where components start with uppercase letters."
   (build-vnodes (normalize-syntax body)))
 
 
-(defun error-element (component-name err-string)
+(defun create-error-element (component-name err-string)
   (esx!
-   (error
-    ({} (format "[%s] %s" component-name err-string)))))
+   (error (p ({} (format "[%s] %s" component-name err-string))))))
 
 
 (defun generate-props-bindings  (props-list prop-name)
@@ -235,11 +234,15 @@ This follows React's convention where components start with uppercase letters."
 
 (defmacro fc! (component-name props-list &rest body)
   `(defun ,component-name (&optional props) ; optional, for root component workaround
-     (condition-case err
-         (let ,(generate-props-bindings props-list 'props)
-           (progn ,@body))
-       (error
-        (error-element (symbol-name #',component-name) (error-message-string err))))))
+     (let ((error-element-ref (use-ref (lambda ()))))
+       (or (funcall error-element-ref)
+           (condition-case err
+               (let ,(generate-props-bindings props-list 'props)
+                 (progn ,@body))
+             (error
+              (let ((error-element
+                     (create-error-element (symbol-name #',component-name) (error-message-string err))))
+                (funcall error-element-ref error-element))))))))
 
 (defmacro static-style! (expr)
   (let ((result (eval expr)))
