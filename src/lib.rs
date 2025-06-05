@@ -6,6 +6,7 @@ mod managed_global_ref;
 mod mutation_writer;
 mod rendering_context;
 mod template;
+mod text_measurement;
 mod utils;
 mod wrapper_components;
 use crate::globals::{CURRENT_EMACS_ENV, take_elisp_error};

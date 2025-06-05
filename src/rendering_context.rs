@@ -2,6 +2,7 @@ use crate::events::TuiEventManager;
 use crate::globals::ROOT_COMPONENT;
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::mutation_writer::{DioxusState, MutationWriter};
+use crate::text_measurement::min_width_multiline;
 use crate::wrapper_components::RootComponent;
 
 use dioxus_core::VirtualDom;
@@ -10,7 +11,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::usize;
 use taffy::prelude::{
-    Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+    AvailableSpace, Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+    length,
 };
 
 #[derive(Debug)]
@@ -56,36 +58,97 @@ pub enum TuiNodeContext {
 }
 
 pub fn measure_text_block(
-    _known_dimensions: taffy::geometry::Size<Option<f32>>,
-    available_space: taffy::geometry::Size<taffy::style::AvailableSpace>,
+    known_dimensions: taffy::geometry::Size<Option<f32>>,
+    available_space: taffy::geometry::Size<AvailableSpace>,
     content: &str,
 ) -> taffy::geometry::Size<f32> {
     // Handle width calculation
-
-    match available_space.width {
-        taffy::style::AvailableSpace::Definite(available_width) => Size {
-            width: available_width,
-            height: textwrap::wrap(content, available_width as usize).len() as f32,
-        },
-        taffy::style::AvailableSpace::MinContent => Size {
-            width: 1.0,
-            height: content.split('\n').map(|l| l.len()).sum::<usize>() as f32,
-        },
-        taffy::style::AvailableSpace::MaxContent => {
-            let lines = content.split('\n');
-            let mut height = 0usize;
-            let width = lines
-                .map(|l| {
-                    height += 1;
-                    l.len()
-                })
-                .max()
-                .unwrap_or(0);
+    if content.is_empty() {
+        return Size::ZERO;
+    }
+    match (known_dimensions.width, known_dimensions.height) {
+        (Some(width), None) => {
+            let width = if let AvailableSpace::Definite(available_width) = available_space.width {
+                if available_width > width {
+                    width
+                } else {
+                    available_width
+                }
+            } else {
+                width
+            };
+            let wrapped_text = textwrap::wrap(content, width as usize);
+            Size {
+                width: wrapped_text
+                    .iter()
+                    .map(|line| line.len())
+                    .max()
+                    .unwrap_or(0) as f32,
+                height: wrapped_text.len() as f32,
+            }
+        }
+        (None, Some(height)) => {
+            let width = min_width_multiline(content, height as usize).unwrap();
+            let wrapped = textwrap::wrap(content, width);
+            let height = wrapped.len();
+            let width = wrapped.iter().map(|line| line.len()).max().unwrap_or(0);
             Size {
                 width: width as f32,
                 height: height as f32,
             }
         }
+        (None, None) => match (available_space.width, available_space.height) {
+            (AvailableSpace::MaxContent, AvailableSpace::MaxContent)
+            | (AvailableSpace::MinContent, AvailableSpace::MinContent)
+            | (AvailableSpace::MaxContent, AvailableSpace::MinContent) => {
+                let lines = content.split('\n');
+                let mut height = 0usize;
+                let width = lines
+                    .map(|l| {
+                        height += 1;
+                        l.len()
+                    })
+                    .max()
+                    .unwrap_or(0);
+                Size {
+                    width: width as f32,
+                    height: height as f32,
+                }
+            }
+            (AvailableSpace::MinContent, AvailableSpace::MaxContent) => Size {
+                width: 1.0,
+                height: content.chars().filter(|&c| c != '\n').count() as f32,
+            },
+            (
+                AvailableSpace::MinContent | AvailableSpace::MaxContent,
+                AvailableSpace::Definite(height),
+            ) => {
+                let width = min_width_multiline(content, height as usize).unwrap();
+                let wrapped = textwrap::wrap(content, width);
+                let height = wrapped.len();
+                let width = wrapped.iter().map(|line| line.len()).max().unwrap_or(0);
+                Size {
+                    width: width as f32,
+                    height: height as f32,
+                }
+            }
+            (
+                AvailableSpace::Definite(width),
+                AvailableSpace::MinContent | AvailableSpace::MaxContent,
+            ) => {
+                let wrapped = textwrap::wrap(content, width as usize);
+                let height = wrapped.len();
+                let width = wrapped.iter().map(|line| line.len()).max().unwrap_or(0);
+                Size {
+                    width: width as f32,
+                    height: height as f32,
+                }
+            }
+            (AvailableSpace::Definite(width), AvailableSpace::Definite(height)) => {
+                Size { width, height }
+            }
+        },
+        (Some(width), Some(height)) => Size { width, height },
     }
 }
 
@@ -560,7 +623,7 @@ impl RenderingContext {
                 |known_dimensions, available_space, node_id, _node_context, _style| {
                     if let Some(text_block) = text_blocks.get(&node_id) {
                         #[cfg(feature = "tracing")]
-                        tracing::debug!(
+                        tracing::info!(
                             "[measure_text_block] known_dimensions:{:?} available_space:{:?} text_block:{:?}",
                             known_dimensions,
                             available_space,
@@ -568,7 +631,7 @@ impl RenderingContext {
                         );
                         let res = measure_text_block(known_dimensions, available_space, &text_block);
                         #[cfg(feature = "tracing")]
-                        tracing::debug!(
+                        tracing::info!(
                             "[measure_text_block] result:{:?}",
                             res
                         );

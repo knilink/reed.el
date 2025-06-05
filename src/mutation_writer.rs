@@ -72,14 +72,20 @@ impl MutationWriter<'_> {
         self.doc.remove(id)
     }
 
-    fn mark_text_box_dirty(&mut self, text_leaf: NodeId) {
-        let mut current_id = text_leaf;
-        while let Some(parent_id) = self.doc.parent(current_id) {
-            current_id = parent_id;
-            if let Some(TuiNodeContext::TextTreeRoot(ctx)) = self.doc.get_node_context(current_id) {
-                self.doc.mark_dirty(ctx.container).unwrap();
-                return;
-            };
+    fn mark_maybe_text_box_dirty(&mut self, maybe_text_node: NodeId) {
+        if let Some(TuiNodeContext::Text(_) | TuiNodeContext::TextLeaf(_)) =
+            self.doc.get_node_context(maybe_text_node)
+        {
+            let mut current_id = maybe_text_node;
+            while let Some(parent_id) = self.doc.parent(current_id) {
+                current_id = parent_id;
+                if let Some(TuiNodeContext::TextTreeRoot(ctx)) =
+                    self.doc.get_node_context(current_id)
+                {
+                    self.doc.mark_dirty(ctx.container).unwrap();
+                    return;
+                };
+            }
         }
     }
 }
@@ -93,6 +99,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         let parent = self.state.element_to_node_id(id);
 
         add_childrens(self.doc, parent, &children);
+        // self.mark_maybe_text_box_dirty(parent);
     }
 
     fn assign_node_id(&mut self, path: &'static [u8], id: ElementId) {
@@ -109,6 +116,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
         let node_id = self.load_child(path);
         self.set_id_mapping(node_id, id);
+        self.mark_maybe_text_box_dirty(node_id);
     }
 
     fn create_placeholder(&mut self, id: ElementId) {
@@ -151,6 +159,8 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.state.element_to_node_id(id);
+        self.mark_maybe_text_box_dirty(anchor_node_id);
+
         insert_before(self.doc, anchor_node_id, &new_nodes);
         self.remove_node(anchor_node_id).unwrap();
     }
@@ -172,6 +182,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.state.element_to_node_id(id);
         insert_after(self.doc, anchor_node_id, &new_nodes);
+        self.mark_maybe_text_box_dirty(anchor_node_id);
     }
 
     fn insert_nodes_before(&mut self, id: ElementId, m: usize) {
@@ -181,6 +192,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         let new_nodes = self.state.stack.split_off(self.state.stack.len() - m);
         let anchor_node_id = self.state.element_to_node_id(id);
         insert_before(self.doc, anchor_node_id, &new_nodes);
+        self.mark_maybe_text_box_dirty(anchor_node_id);
     }
 
     fn set_attribute(
@@ -273,7 +285,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         if let Some(TuiNodeContext::TextLeaf(ctx)) = self.doc.get_node_context_mut(node_id) {
             ctx.text = Cow::Owned(value.to_string());
         };
-        self.mark_text_box_dirty(node_id);
+        self.mark_maybe_text_box_dirty(node_id);
     }
 
     fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
