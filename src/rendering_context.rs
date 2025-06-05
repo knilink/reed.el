@@ -2,17 +2,17 @@ use crate::events::TuiEventManager;
 use crate::globals::ROOT_COMPONENT;
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::mutation_writer::{DioxusState, MutationWriter};
-use crate::text_measurement::min_width_multiline;
+use crate::text_measurement::measure_text_block;
 use crate::wrapper_components::RootComponent;
 
 use dioxus_core::VirtualDom;
 use emacs::Value;
+use similar::{ChangeTag, TextDiff};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::usize;
 use taffy::prelude::{
     AvailableSpace, Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
-    length,
 };
 
 #[derive(Debug)]
@@ -57,99 +57,47 @@ pub enum TuiNodeContext {
     ErrorMessage(ErrorMessageContext),
 }
 
-pub fn measure_text_block(
-    known_dimensions: taffy::geometry::Size<Option<f32>>,
-    available_space: taffy::geometry::Size<AvailableSpace>,
-    content: &str,
-) -> taffy::geometry::Size<f32> {
-    // Handle width calculation
-    if content.is_empty() {
-        return Size::ZERO;
+fn edit_instruction(old_text: &str, new_text: &str) -> Vec<(usize, usize, String)> {
+    let mut cursor = 0usize;
+    let mut deletion_start = 0usize;
+    let mut inserting = Vec::<&str>::new();
+    let mut instructions = Vec::<(usize, usize, String)>::new();
+    let diff = TextDiff::from_lines(old_text, new_text);
+    for change in diff.iter_all_changes() {
+        match change.tag() {
+            ChangeTag::Delete => {
+                cursor += change.value().chars().count();
+            }
+            ChangeTag::Insert => {
+                inserting.push(change.value());
+            }
+            ChangeTag::Equal => {
+                if deletion_start < cursor {
+                    let replacement = inserting.join("");
+                    let inserting_length = replacement.chars().count();
+                    instructions.push((deletion_start, cursor, replacement));
+                    inserting.clear();
+                    cursor = deletion_start + inserting_length;
+                } else if !inserting.is_empty() {
+                    let replacement = inserting.join("");
+                    let inserting_length = replacement.chars().count();
+                    instructions.push((cursor, cursor, replacement));
+                    inserting.clear();
+                    cursor += inserting_length;
+                }
+                cursor += change.value().chars().count();
+                deletion_start = cursor;
+            }
+        };
     }
-    match (known_dimensions.width, known_dimensions.height) {
-        (Some(width), None) => {
-            let width = if let AvailableSpace::Definite(available_width) = available_space.width {
-                if available_width > width {
-                    width
-                } else {
-                    available_width
-                }
-            } else {
-                width
-            };
-            let wrapped_text = textwrap::wrap(content, width as usize);
-            Size {
-                width: wrapped_text
-                    .iter()
-                    .map(|line| line.len())
-                    .max()
-                    .unwrap_or(0) as f32,
-                height: wrapped_text.len() as f32,
-            }
-        }
-        (None, Some(height)) => {
-            let width = min_width_multiline(content, height as usize).unwrap();
-            let wrapped = textwrap::wrap(content, width);
-            let height = wrapped.len();
-            let width = wrapped.iter().map(|line| line.len()).max().unwrap_or(0);
-            Size {
-                width: width as f32,
-                height: height as f32,
-            }
-        }
-        (None, None) => match (available_space.width, available_space.height) {
-            (AvailableSpace::MaxContent, AvailableSpace::MaxContent)
-            | (AvailableSpace::MinContent, AvailableSpace::MinContent)
-            | (AvailableSpace::MaxContent, AvailableSpace::MinContent) => {
-                let lines = content.split('\n');
-                let mut height = 0usize;
-                let width = lines
-                    .map(|l| {
-                        height += 1;
-                        l.len()
-                    })
-                    .max()
-                    .unwrap_or(0);
-                Size {
-                    width: width as f32,
-                    height: height as f32,
-                }
-            }
-            (AvailableSpace::MinContent, AvailableSpace::MaxContent) => Size {
-                width: 1.0,
-                height: content.chars().filter(|&c| c != '\n').count() as f32,
-            },
-            (
-                AvailableSpace::MinContent | AvailableSpace::MaxContent,
-                AvailableSpace::Definite(height),
-            ) => {
-                let width = min_width_multiline(content, height as usize).unwrap();
-                let wrapped = textwrap::wrap(content, width);
-                let height = wrapped.len();
-                let width = wrapped.iter().map(|line| line.len()).max().unwrap_or(0);
-                Size {
-                    width: width as f32,
-                    height: height as f32,
-                }
-            }
-            (
-                AvailableSpace::Definite(width),
-                AvailableSpace::MinContent | AvailableSpace::MaxContent,
-            ) => {
-                let wrapped = textwrap::wrap(content, width as usize);
-                let height = wrapped.len();
-                let width = wrapped.iter().map(|line| line.len()).max().unwrap_or(0);
-                Size {
-                    width: width as f32,
-                    height: height as f32,
-                }
-            }
-            (AvailableSpace::Definite(width), AvailableSpace::Definite(height)) => {
-                Size { width, height }
-            }
-        },
-        (Some(width), Some(height)) => Size { width, height },
+    if deletion_start < cursor {
+        let replacement = inserting.join("");
+        instructions.push((deletion_start, cursor, replacement));
+    } else if !inserting.is_empty() {
+        let replacement = inserting.join("");
+        instructions.push((cursor, cursor, replacement));
     }
+    instructions
 }
 
 struct TaffyTreeIterator<'a, T> {
@@ -363,7 +311,7 @@ impl Canvas {
                         } else {
                             *cursor_x += 1;
                             if *cursor_x - maybe_trailling_whitespaces
-                                > wrapped_text[*cursor_y].len()
+                                > wrapped_text[*cursor_y].chars().count()
                             {
                                 let absolute_y = y + *cursor_y;
                                 for face in face_stack.iter() {
@@ -546,6 +494,7 @@ pub struct RenderingContext {
     dioxus_state: DioxusState,
     event_manager: TuiEventManager,
     window_width: usize,
+    result_cache: String,
     // size: Size<AvailableSpace>,
 }
 
@@ -578,6 +527,7 @@ impl RenderingContext {
             dioxus_state,
             event_manager,
             window_width: 80,
+            result_cache: String::new(),
             // size: Size::MAX_CONTENT,
         }
     }
@@ -603,7 +553,13 @@ impl RenderingContext {
         self.window_width
     }
 
-    pub fn render(&mut self) -> (String, Vec<(usize, usize, ManagedGlobalRef)>) {
+    pub fn render(
+        &mut self,
+    ) -> (
+        // Vec<(usize, usize, String)>,
+        String,
+        Vec<(usize, usize, ManagedGlobalRef)>,
+    ) {
         ROOT_COMPONENT.set(&self.root_component_ref, || {
             let mut mutation_writer = MutationWriter {
                 doc: &mut self.doc,
@@ -623,7 +579,7 @@ impl RenderingContext {
                 |known_dimensions, available_space, node_id, _node_context, _style| {
                     if let Some(text_block) = text_blocks.get(&node_id) {
                         #[cfg(feature = "tracing")]
-                        tracing::info!(
+                        tracing::debug!(
                             "[measure_text_block] known_dimensions:{:?} available_space:{:?} text_block:{:?}",
                             known_dimensions,
                             available_space,
@@ -631,7 +587,7 @@ impl RenderingContext {
                         );
                         let res = measure_text_block(known_dimensions, available_space, &text_block);
                         #[cfg(feature = "tracing")]
-                        tracing::info!(
+                        tracing::debug!(
                             "[measure_text_block] result:{:?}",
                             res
                         );
@@ -647,8 +603,10 @@ impl RenderingContext {
         let mut canvas = Canvas::new(layout.size.width as usize, layout.size.height as usize);
 
         canvas.draw(&self.doc, &text_blocks, 0, 0, self.root_id);
-
-        (canvas.to_string(), canvas.faces)
+        let result = canvas.to_string();
+        // let instructions = edit_instruction(&self.result_cache, &result);
+        // self.result_cache = result;
+        (result, canvas.faces)
     }
 
     pub fn handle_cursor_event(

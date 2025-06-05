@@ -82,7 +82,7 @@ fn render_immediate<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
         RENDERING_CONTEXTS.with(|contexts| {
             let mut ctxs = contexts.borrow_mut();
             let ctx = ctxs.get_mut(&name).unwrap();
-            let (text, faces) = ctx.render();
+            let (result, faces) = ctx.render();
 
             match take_elisp_error() {
                 None => {
@@ -100,7 +100,24 @@ fn render_immediate<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
                             faces_lisp,
                         )?;
                     }
-                    env.cons(text, faces_lisp)
+                    // let mut edit_instruction_lisp = ().into_lisp(env)?;
+                    // for (begin, end, text) in result.iter() {
+                    //     edit_instruction_lisp = env.cons(
+                    //         env.call(
+                    //             "list",
+                    //             [
+                    //                 begin.into_lisp(env)?,
+                    //                 end.into_lisp(env)?,
+                    //                 text.into_lisp(env)?,
+                    //             ],
+                    //         )?,
+                    //         edit_instruction_lisp,
+                    //     )?
+                    // }
+                    // let elapsed = start.elapsed(); // Get elapsed time as `Duration`
+                    //
+                    // env.cons(edit_instruction_lisp, faces_lisp)
+                    env.cons(result.into_lisp(env).unwrap(), faces_lisp)
                 }
                 Some(e) => Err(e),
             }
