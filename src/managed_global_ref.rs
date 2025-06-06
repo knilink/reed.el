@@ -1,5 +1,5 @@
 use emacs::{Env, GlobalRef, Value};
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::globals::CURRENT_EMACS_ENV;
 
@@ -20,7 +20,7 @@ impl Drop for GlobalRefHolder {
 
 #[derive(Debug)]
 pub struct ManagedGlobalRef {
-    inner: Arc<GlobalRefHolder>,
+    inner: Rc<GlobalRefHolder>,
 }
 
 impl PartialEq for ManagedGlobalRef {
@@ -36,7 +36,7 @@ impl PartialEq for ManagedGlobalRef {
 impl ManagedGlobalRef {
     pub fn new(global_ref: GlobalRef) -> Self {
         Self {
-            inner: Arc::new(GlobalRefHolder {
+            inner: Rc::new(GlobalRefHolder {
                 global_ref: Some(global_ref),
             }),
         }
@@ -60,7 +60,7 @@ impl ManagedGlobalRef {
 impl Clone for ManagedGlobalRef {
     fn clone(&self) -> Self {
         Self {
-            inner: Arc::clone(&self.inner),
+            inner: Rc::clone(&self.inner),
         }
     }
 }
