@@ -12,7 +12,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::usize;
 use taffy::prelude::{
-    AvailableSpace, Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+    Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
 };
 
 #[derive(Debug)]
@@ -57,7 +57,7 @@ pub enum TuiNodeContext {
     ErrorMessage(ErrorMessageContext),
 }
 
-fn edit_instruction(old_text: &str, new_text: &str) -> Vec<(usize, usize, String)> {
+fn _edit_instruction(old_text: &str, new_text: &str) -> Vec<(usize, usize, String)> {
     let mut cursor = 0usize;
     let mut deletion_start = 0usize;
     let mut inserting = Vec::<&str>::new();
@@ -494,7 +494,8 @@ pub struct RenderingContext {
     dioxus_state: DioxusState,
     event_manager: TuiEventManager,
     window_width: usize,
-    result_cache: String,
+    should_redraw: bool,
+    // result_cache: String,
     // size: Size<AvailableSpace>,
 }
 
@@ -508,6 +509,7 @@ impl RenderingContext {
             stack: Vec::new(),
             node_id_mapping: [Some(root_id)].to_vec(),
         };
+        let mut should_redraw = false;
         let mut event_manager = TuiEventManager::new();
         // let mutation_writter =
         ROOT_COMPONENT.set(&root_component_ref, || {
@@ -516,6 +518,7 @@ impl RenderingContext {
                 // root_id,
                 state: &mut dioxus_state,
                 event_manager: &mut event_manager,
+                should_redraw: &mut should_redraw,
             };
             vdom.rebuild(&mut mutation_writer);
         });
@@ -527,13 +530,15 @@ impl RenderingContext {
             dioxus_state,
             event_manager,
             window_width: 80,
-            result_cache: String::new(),
+            should_redraw,
+            // result_cache: String::new(),
             // size: Size::MAX_CONTENT,
         }
     }
 
     pub fn set_width(&mut self, width: usize) {
         // self.size.width = AvailableSpace::from_length(width);
+        self.should_redraw = true;
         self.window_width = width;
         let width = width as f32;
         let style = self.doc.style(self.root_id).unwrap();
@@ -555,20 +560,26 @@ impl RenderingContext {
 
     pub fn render(
         &mut self,
-    ) -> (
+    ) -> Option<(
         // Vec<(usize, usize, String)>,
         String,
         Vec<(usize, usize, ManagedGlobalRef)>,
-    ) {
+    )> {
         ROOT_COMPONENT.set(&self.root_component_ref, || {
             let mut mutation_writer = MutationWriter {
                 doc: &mut self.doc,
                 // root_id: self.root_id,
                 state: &mut self.dioxus_state,
                 event_manager: &mut self.event_manager,
+                should_redraw: &mut self.should_redraw,
             };
             self.vdom.render_immediate(&mut mutation_writer);
+            mutation_writer.should_redraw
         });
+
+        if !self.should_redraw {
+            return None;
+        }
 
         let text_blocks = collect_text_blocks(&self.doc, self.root_id);
 
@@ -606,7 +617,8 @@ impl RenderingContext {
         let result = canvas.to_string();
         // let instructions = edit_instruction(&self.result_cache, &result);
         // self.result_cache = result;
-        (result, canvas.faces)
+        self.should_redraw = false;
+        return Some((result, canvas.faces));
     }
 
     pub fn handle_cursor_event(

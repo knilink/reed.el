@@ -37,6 +37,7 @@ pub struct MutationWriter<'a> {
     // pub root_id: NodeId,
     pub state: &'a mut DioxusState,
     pub event_manager: &'a mut TuiEventManager,
+    pub should_redraw: &'a mut bool,
 }
 
 impl MutationWriter<'_> {
@@ -92,6 +93,7 @@ impl MutationWriter<'_> {
 
 impl dioxus_core::WriteMutations for MutationWriter<'_> {
     fn append_children(&mut self, id: ElementId, m: usize) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[append_children] id:{} m:{}", id.0, m);
 
@@ -103,6 +105,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn assign_node_id(&mut self, path: &'static [u8], id: ElementId) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[assign_node_id] path:{:?} id:{}", path, id.0);
 
@@ -154,6 +157,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn replace_node_with(&mut self, id: ElementId, m: usize) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[replace_node_with] id:{} m:{}", id.0, m);
 
@@ -166,6 +170,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn replace_placeholder_with_nodes(&mut self, path: &'static [u8], m: usize) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[replace_placeholder_with_nodes] path:{:?} m:{}", path, m);
 
@@ -176,6 +181,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn insert_nodes_after(&mut self, id: ElementId, m: usize) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[insert_nodes_after] id:{} m:{}", id.0, m);
 
@@ -186,6 +192,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn insert_nodes_before(&mut self, id: ElementId, m: usize) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[insert_nodes_before] id:{} m:{}", id.0, m);
 
@@ -218,6 +225,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
                 AttributeValue::Text(value) => {
                     let new_style = serde_lexpr::from_str(&value).unwrap();
                     self.doc.set_style(node_id, new_style).unwrap();
+                    *self.should_redraw = true;
                 }
                 AttributeValue::Any(rc_value) => {
                     if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
@@ -232,6 +240,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
                                 .unwrap();
                             let new_style = serde_lexpr::from_str(&text_value).unwrap();
                             self.doc.set_style(node_id, new_style).unwrap();
+                            *self.should_redraw = true;
                         })
                     }
                 }
@@ -263,9 +272,18 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
                         if let Some(ctx) = self.doc.get_node_context_mut(node_id) {
                             match ctx {
-                                TuiNodeContext::Text(ctx) => ctx.face = face,
-                                TuiNodeContext::Box(ctx) => ctx.face = face,
-                                TuiNodeContext::TextBox(ctx) => ctx.face = face,
+                                TuiNodeContext::Text(ctx) => {
+                                    ctx.face = face;
+                                    *self.should_redraw = true;
+                                }
+                                TuiNodeContext::Box(ctx) => {
+                                    ctx.face = face;
+                                    *self.should_redraw = true;
+                                }
+                                TuiNodeContext::TextBox(ctx) => {
+                                    ctx.face = face;
+                                    *self.should_redraw = true;
+                                }
                                 _ => {}
                             };
                         };
@@ -277,6 +295,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn set_node_text(&mut self, value: &str, id: ElementId) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[set_node_text] id:{} value:{}", id.0, value);
 
@@ -301,6 +320,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
     }
 
     fn remove_node(&mut self, id: ElementId) {
+        *self.should_redraw = true;
         #[cfg(feature = "tracing")]
         tracing::info!("[remove_node] id:{}", id.0);
 

@@ -82,42 +82,47 @@ fn render_immediate<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
         RENDERING_CONTEXTS.with(|contexts| {
             let mut ctxs = contexts.borrow_mut();
             let ctx = ctxs.get_mut(&name).unwrap();
-            let (result, faces) = ctx.render();
+            let render_result = ctx.render();
 
             match take_elisp_error() {
                 None => {
-                    let mut faces_lisp = ().into_lisp(env)?;
-                    for (begin, end, face_ref) in faces.iter().rev() {
-                        faces_lisp = env.cons(
-                            env.call(
-                                "list",
-                                [
-                                    begin.into_lisp(env)?,
-                                    end.into_lisp(env)?,
-                                    face_ref.bind(env),
-                                ],
-                            )?,
-                            faces_lisp,
-                        )?;
+                    match render_result {
+                        Some((result, faces)) => {
+                            let mut faces_lisp = ().into_lisp(env)?;
+                            for (begin, end, face_ref) in faces.iter().rev() {
+                                faces_lisp = env.cons(
+                                    env.call(
+                                        "list",
+                                        [
+                                            begin.into_lisp(env)?,
+                                            end.into_lisp(env)?,
+                                            face_ref.bind(env),
+                                        ],
+                                    )?,
+                                    faces_lisp,
+                                )?;
+                            }
+                            // let mut edit_instruction_lisp = ().into_lisp(env)?;
+                            // for (begin, end, text) in result.iter() {
+                            //     edit_instruction_lisp = env.cons(
+                            //         env.call(
+                            //             "list",
+                            //             [
+                            //                 begin.into_lisp(env)?,
+                            //                 end.into_lisp(env)?,
+                            //                 text.into_lisp(env)?,
+                            //             ],
+                            //         )?,
+                            //         edit_instruction_lisp,
+                            //     )?
+                            // }
+                            // let elapsed = start.elapsed(); // Get elapsed time as `Duration`
+                            //
+                            // env.cons(edit_instruction_lisp, faces_lisp)
+                            env.cons(result.into_lisp(env).unwrap(), faces_lisp)
+                        }
+                        None => env.list([]),
                     }
-                    // let mut edit_instruction_lisp = ().into_lisp(env)?;
-                    // for (begin, end, text) in result.iter() {
-                    //     edit_instruction_lisp = env.cons(
-                    //         env.call(
-                    //             "list",
-                    //             [
-                    //                 begin.into_lisp(env)?,
-                    //                 end.into_lisp(env)?,
-                    //                 text.into_lisp(env)?,
-                    //             ],
-                    //         )?,
-                    //         edit_instruction_lisp,
-                    //     )?
-                    // }
-                    // let elapsed = start.elapsed(); // Get elapsed time as `Duration`
-                    //
-                    // env.cons(edit_instruction_lisp, faces_lisp)
-                    env.cons(result.into_lisp(env).unwrap(), faces_lisp)
                 }
                 Some(e) => Err(e),
             }
