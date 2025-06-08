@@ -190,6 +190,19 @@ fn use_effect<'e>(_: &'e Env, f: Value) -> Result<()> {
 }
 
 #[defun]
+fn use_before_render<'e>(_: &'e Env, f: Value) -> Result<()> {
+    let f_ref = ManagedGlobalRef::from(f);
+    dioxus_core::prelude::use_before_render(move || {
+        CURRENT_EMACS_ENV.with(|env| {
+            if let Err(e) = f_ref.as_ref().call(env, []) {
+                set_elisp_error(e);
+            }
+        })
+    });
+    Ok(())
+}
+
+#[defun]
 fn use_after_render<'e>(_: &'e Env, f: Value) -> Result<()> {
     let f_ref = ManagedGlobalRef::from(f);
     dioxus_core::prelude::use_after_render(move || {
@@ -222,4 +235,20 @@ fn use_context_provider<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
 fn use_context<'e>(env: &'e Env) -> Result<Value<'e>> {
     let context_ref = dioxus_hooks::use_context::<ManagedGlobalRef>();
     env.call("identity", [context_ref.bind(env)])
+}
+
+#[defun]
+fn use_root_context<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
+    let mut captured_error: Option<emacs::Error> = None;
+    let context_ref = dioxus_hooks::use_root_context(|| {
+        ManagedGlobalRef::from(init.call([]).unwrap_or_else(|e| {
+            captured_error = Some(e);
+            nil.bind(env)
+        }))
+    });
+
+    match captured_error {
+        None => env.call("identity", [context_ref.bind(env)]),
+        Some(err) => Err(err),
+    }
 }
