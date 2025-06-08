@@ -173,8 +173,8 @@ fn taffy_length<'e>(_: &'e Env, unit: Value, value: Value) -> Result<String> {
     let res = match unit_name.as_ref() {
         "percent" => Some(serde_lexpr::to_string(&CompactLength::from_percent(value))),
         "length" => Some(serde_lexpr::to_string(&CompactLength::from_length(value))),
-        "AUTO" => Some(serde_lexpr::to_string(&CompactLength::AUTO)),
-        "ZERO" => Some(serde_lexpr::to_string(&CompactLength::ZERO)),
+        "auto" => Some(serde_lexpr::to_string(&CompactLength::AUTO)),
+        "zero" => Some(serde_lexpr::to_string(&CompactLength::ZERO)),
         _ => None,
     };
     match res {
