@@ -66,6 +66,10 @@ Then run the app with
 ```sh
 emacs -l reed.el/target/release/libreed.so -L reed.el/lisp -l ./my-first-app.el -Q
 ```
+If everything goes well, result bellow can be seen.
+![image](https://github.com/user-attachments/assets/b1e96488-8c7b-4631-9826-a0ca4367d73d)
+
+
 
 ## Example App
 - [oh-puhn-text-ui.el](https://github.com/knilink/oh-puhn-text-ui.el): A more interactive text ui llm frontend.
