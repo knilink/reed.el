@@ -15,7 +15,13 @@ pub struct TuiEventManager {
     focusing: BTreeSet<ElementId>,
 }
 
-fn is_point_in_node<T>(doc: &TaffyTree<T>, node_id: NodeId, x: usize, y: usize) -> bool {
+fn is_point_in_node<T>(
+    doc: &TaffyTree<T>,
+    root_id: NodeId,
+    node_id: NodeId,
+    x: usize,
+    y: usize,
+) -> bool {
     if let Ok(layout) = doc.layout(node_id) {
         let mut box_x = layout.location.x as usize;
         let mut box_y = layout.location.y as usize;
@@ -28,7 +34,12 @@ fn is_point_in_node<T>(doc: &TaffyTree<T>, node_id: NodeId, x: usize, y: usize) 
             box_x += layout.location.x as usize;
             box_y += layout.location.y as usize;
         }
-        x >= box_x && x < box_x + box_w && y >= box_y && y < box_y + box_h
+        // not mounted if root_id != current_ancestor
+        root_id == current_ancestor
+            && x >= box_x
+            && x < box_x + box_w
+            && y >= box_y
+            && y < box_y + box_h
     } else {
         false
     }
@@ -123,12 +134,13 @@ impl TuiEventManager {
         event_payload: ManagedGlobalRef,
     ) {
         let (x, y) = cursor_pos;
+        let root_id = node_id_mapping[0].unwrap();
         // Check all elements with cursor_move listeners
         match event_name.as_ref() {
             "move" => {
                 for element_id in BTreeSet::union(&self.hover, &self.leave) {
                     if let Some(node_id) = node_id_mapping[element_id.0] {
-                        if is_point_in_node(doc, node_id, x, y) {
+                        if is_point_in_node(doc, root_id, node_id, x, y) {
                             if self.hovering.insert(*element_id) {
                                 runtime.handle_event(
                                     "hover",
@@ -151,7 +163,7 @@ impl TuiEventManager {
             "click" => {
                 for element_id in BTreeSet::union(&self.focus, &self.blur) {
                     if let Some(node_id) = node_id_mapping[element_id.0] {
-                        if is_point_in_node(doc, node_id, x, y) {
+                        if is_point_in_node(doc, root_id, node_id, x, y) {
                             if self.focusing.insert(*element_id) {
                                 runtime.handle_event(
                                     "focus",
@@ -172,7 +184,7 @@ impl TuiEventManager {
                 }
                 for element_id in self.click.iter().rev() {
                     if let Some(node_id) = node_id_mapping[element_id.0] {
-                        if is_point_in_node(doc, node_id, x, y) {
+                        if is_point_in_node(doc, root_id, node_id, x, y) {
                             runtime.handle_event(
                                 "click",
                                 create_event(event_payload.clone(), true),

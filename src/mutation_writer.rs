@@ -251,10 +251,10 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
                 if let AttributeValue::Any(rc_value) = value {
                     if let Some(original) = rc_value.as_any().downcast_ref::<ManagedGlobalRef>() {
                         CURRENT_EMACS_ENV.with(|env| {
-                            original
-                                .as_ref()
-                                .call(env, [id.0.into_lisp(env).unwrap()])
-                                .unwrap();
+                            let original = original.as_ref().bind(env);
+                            if original.is_not_nil() {
+                                original.call([id.0.into_lisp(env).unwrap()]).unwrap();
+                            }
                         });
                     }
                 };

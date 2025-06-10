@@ -214,6 +214,10 @@ pub fn WrapperComponent(component_ref: ManagedGlobalRef, props_ref: ManagedGloba
                 let mut signal_tabels = signal_tabels.borrow_mut();
                 signal_tabels.remove(&scope_id);
             });
+            MEMO_TABLES.with(|memo_tabels| {
+                let mut memo_tabels = memo_tabels.borrow_mut();
+                memo_tabels.remove(&scope_id);
+            });
         },
     );
 
@@ -248,12 +252,20 @@ pub fn RootComponent() -> Element {
                 let mut signal_tabels = signal_tabels.borrow_mut();
                 signal_tabels.insert(scope_id, SignalTable::new());
             });
+            MEMO_TABLES.with(|memo_tabels| {
+                let mut memo_tabels = memo_tabels.borrow_mut();
+                memo_tabels.insert(scope_id, SignalTable::new());
+            });
             scope_id
         },
         |scope_id| {
             SIGNAL_TABLES.with(|signal_tabels| {
                 let mut signal_tabels = signal_tabels.borrow_mut();
                 signal_tabels.remove(&scope_id);
+            });
+            MEMO_TABLES.with(|memo_tabels| {
+                let mut memo_tabels = memo_tabels.borrow_mut();
+                memo_tabels.remove(&scope_id);
             });
         },
     );

@@ -3,7 +3,6 @@
 (defalias 'use-hook #'reed-hooks-use-hook)
 (defalias 'use-drop #'reed-hooks-use-drop)
 (defalias 'use-hook-with-cleanup #'reed-hooks-use-hook-with-cleanup)
-(defalias 'use-memo #'reed-hooks-use-memo)
 (defalias 'use-effect #'reed-hooks-use-effect)
 (defalias 'use-before-render #'reed-hooks-use-before-render)
 (defalias 'use-after-render #'reed-hooks-use-after-render)
@@ -33,10 +32,15 @@
            current))))))
 
 (defun use-signal (init)
-  (let ((sig (reed-hooks-use-signal init)))
+  (let ((sigal-handle (reed-hooks-use-signal init)))
     (lambda (&rest args)
       (if args
-          (reed-hooks-signal-set sig (car args))
-        (reed-hooks-signal-get sig)))))
+          (reed-hooks-signal-set sigal-handle (car args))
+        (reed-hooks-signal-get sigal-handle)))))
+
+
+(defun use-memo (init)
+  (let ((memo-handle (reed-hooks-use-memo init)))
+    (lambda () (reed-hooks-memo-get memo-handle))))
 
 (provide 'reed-hooks)
