@@ -11,8 +11,9 @@ use similar::{ChangeTag, TextDiff};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::usize;
-use taffy::prelude::{
-    Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree,
+use taffy::{
+    TraversePartialTree,
+    prelude::{Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree},
 };
 
 #[derive(Debug)]
@@ -45,6 +46,7 @@ pub struct TextTreeRootContext {
 pub struct TextBoxLeafContext {
     pub text_tree_root: NodeId,
     pub face: Option<ManagedGlobalRef>,
+    pub cache_text_block: String,
 }
 
 #[derive(Debug)]
@@ -102,14 +104,14 @@ fn _edit_instruction(old_text: &str, new_text: &str) -> Vec<(usize, usize, Strin
 
 struct TaffyTreeIterator<'a, T> {
     taffy: &'a TaffyTree<T>,
-    stack: Vec<NodeId>,
+    stack: Vec<<TaffyTree as TraversePartialTree>::ChildIter<'a>>,
 }
 
 impl<'a, T> TaffyTreeIterator<'a, T> {
     fn new(taffy: &'a TaffyTree<T>, root: NodeId) -> Self {
         Self {
             taffy,
-            stack: vec![root],
+            stack: vec![taffy.child_ids(root)],
         }
     }
 }
@@ -118,28 +120,24 @@ impl<'a, T> Iterator for TaffyTreeIterator<'a, T> {
     type Item = NodeId;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node) = self.stack.pop() {
-            // Push children in reverse order so they're popped in correct order
-            if let Ok(children) = self.taffy.children(node) {
-                for &child in children.iter().rev() {
-                    self.stack.push(child);
-                }
+        loop {
+            let last_iter = self.stack.last_mut()?;
+            if let Some(next_node) = last_iter.next() {
+                self.stack.push(self.taffy.child_ids(next_node));
+                return Some(next_node);
             }
-            Some(node)
-        } else {
-            None
+            self.stack.pop();
         }
     }
 }
 
-pub fn collect_text_blocks(
-    doc: &TaffyTree<TuiNodeContext>,
-    root_id: NodeId,
-) -> HashMap<NodeId, String> {
+pub fn collect_text_blocks(doc: &mut TaffyTree<TuiNodeContext>, root_id: NodeId) {
     let mut textbox_line = HashMap::<NodeId, String>::new();
-    let iterator = TaffyTreeIterator::new(doc, root_id);
-    for node in iterator {
+    for node in TaffyTreeIterator::new(doc, root_id) {
         if let Some(TuiNodeContext::TextBox(ctx)) = doc.get_node_context(node) {
+            if !doc.dirty(node).unwrap() {
+                continue;
+            };
             let mut canvas = String::new();
             let text_iterator = TaffyTreeIterator::new(doc, ctx.text_tree_root);
             for text_node in text_iterator {
@@ -161,7 +159,17 @@ pub fn collect_text_blocks(
             textbox_line.insert(node, ctx.text.to_string());
         }
     }
-    textbox_line
+
+    for (k, v) in textbox_line {
+        match doc.get_node_context_mut(k) {
+            Some(TuiNodeContext::TextBox(ctx)) => {
+                ctx.cache_text_block = v;
+            }
+            _ => {
+                panic!("should not reach");
+            }
+        }
+    }
 }
 
 pub struct Canvas {
@@ -185,7 +193,6 @@ impl Canvas {
     pub fn draw(
         &mut self,
         doc: &TaffyTree<TuiNodeContext>,
-        cached_text_block: &HashMap<NodeId, String>,
         parent_x: usize,
         parent_y: usize,
         id: NodeId,
@@ -216,26 +223,25 @@ impl Canvas {
         }
         self.draw_border(parent_x, parent_y, layout);
         if let Some(TuiNodeContext::TextBox(ctx)) = maybe_ctx {
-            if let Some(text_content) = cached_text_block.get(&id) {
-                let width: usize = layout.content_box_width() as usize;
-                let wrapped_text = textwrap::wrap(text_content, width);
-                let content_x = parent_x + layout.content_box_x() as usize;
-                let content_y = parent_y + layout.content_box_y() as usize;
-                self.draw_text(content_x, content_y, &wrapped_text);
-                self.draw_text_face(
-                    doc,
-                    ctx.text_tree_root,
-                    &wrapped_text,
-                    parent_x + layout.content_box_x() as usize,
-                    parent_y + layout.content_box_y() as usize,
-                    &mut 0,
-                    &mut 0,
-                    &mut Vec::<ManagedGlobalRef>::new(),
-                )
-            }
+            let text_content = &ctx.cache_text_block;
+            let width: usize = layout.content_box_width() as usize;
+            let wrapped_text = textwrap::wrap(text_content, width);
+            let content_x = parent_x + layout.content_box_x() as usize;
+            let content_y = parent_y + layout.content_box_y() as usize;
+            self.draw_text(content_x, content_y, &wrapped_text);
+            self.draw_text_face(
+                doc,
+                ctx.text_tree_root,
+                &wrapped_text,
+                parent_x + layout.content_box_x() as usize,
+                parent_y + layout.content_box_y() as usize,
+                &mut 0,
+                &mut 0,
+                &mut Vec::<ManagedGlobalRef>::new(),
+            )
         } else {
             for child_id in doc.children(id).unwrap() {
-                self.draw(doc, cached_text_block, x, y, child_id);
+                self.draw(doc, x, y, child_id);
             }
         }
     }
@@ -581,29 +587,30 @@ impl RenderingContext {
             return None;
         }
 
-        let text_blocks = collect_text_blocks(&self.doc, self.root_id);
+        collect_text_blocks(&mut self.doc, self.root_id);
 
         self.doc
             .compute_layout_with_measure(
                 self.root_id,
                 Size::MAX_CONTENT,
-                |known_dimensions, available_space, node_id, _node_context, _style| {
-                    if let Some(text_block) = text_blocks.get(&node_id) {
+                |known_dimensions, available_space, _node_id, node_context, _style| {
+                    if let Some(TuiNodeContext::TextBox(ctx)) =  node_context {
                         #[cfg(feature = "tracing")]
                         tracing::debug!(
                             "[measure_text_block] known_dimensions:{:?} available_space:{:?} text_block:{:?}",
                             known_dimensions,
                             available_space,
-                            text_block
+                            ctx.cache_text_block
                         );
-                        let res = measure_text_block(known_dimensions, available_space, &text_block);
+                        let res = measure_text_block(known_dimensions, available_space, &ctx.cache_text_block);
                         #[cfg(feature = "tracing")]
                         tracing::debug!(
                             "[measure_text_block] result:{:?}",
                             res
                         );
                         res
-                    } else {
+                    }
+                    else {
                         Size::ZERO
                     }
                 },
@@ -613,7 +620,7 @@ impl RenderingContext {
         let layout = self.doc.layout(self.root_id).unwrap();
         let mut canvas = Canvas::new(layout.size.width as usize, layout.size.height as usize);
 
-        canvas.draw(&self.doc, &text_blocks, 0, 0, self.root_id);
+        canvas.draw(&self.doc, 0, 0, self.root_id);
         let result = canvas.to_string();
         // let instructions = edit_instruction(&self.result_cache, &result);
         // self.result_cache = result;

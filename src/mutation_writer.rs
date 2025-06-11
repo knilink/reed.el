@@ -420,6 +420,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                 "p" => TuiNodeContext::TextBox(TextBoxLeafContext {
                     text_tree_root: doc.new_leaf(Default::default()).unwrap(),
                     face: None,
+                    cache_text_block: String::new(),
                 }),
                 // text
                 "span" => TuiNodeContext::Text(TextNodeContext { face: None }),
