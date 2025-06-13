@@ -421,9 +421,13 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                     text_tree_root: doc.new_leaf(Default::default()).unwrap(),
                     face: None,
                     cache_text_block: String::new(),
+                    cache_text_wrapping: Vec::new(),
                 }),
                 // text
-                "span" => TuiNodeContext::Text(TextNodeContext { face: None }),
+                "span" => TuiNodeContext::Text(TextNodeContext {
+                    face: None,
+                    target_ranges: Vec::new(),
+                }),
                 // error
                 "error" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),
                 "pre" => TuiNodeContext::ErrorMessage(ErrorMessageContext {}),

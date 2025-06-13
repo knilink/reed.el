@@ -55,7 +55,7 @@ fn min_width(text: &[char], lines: usize) -> usize {
             .position(|c| !c.is_whitespace())
             .unwrap_or(text.len());
         let end = text.iter().rposition(|c| !c.is_whitespace()).unwrap_or(0);
-        return end - start + 1;
+        return if start > end { 0 } else { end + 1 - start };
     }
 
     let mut current_text = text;

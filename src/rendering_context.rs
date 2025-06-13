@@ -6,6 +6,7 @@ use crate::text_measurement::measure_text_block;
 use crate::wrapper_components::RootComponent;
 
 use dioxus_core::VirtualDom;
+use dioxus_signals::get_global_context;
 use emacs::Value;
 use similar::{ChangeTag, TextDiff};
 use std::borrow::Cow;
@@ -25,6 +26,7 @@ pub struct TextLeafContext {
 #[derive(Debug)]
 pub struct TextNodeContext {
     pub face: Option<ManagedGlobalRef>,
+    pub target_ranges: Vec<(usize, usize)>,
 }
 
 // div
@@ -47,6 +49,7 @@ pub struct TextBoxLeafContext {
     pub text_tree_root: NodeId,
     pub face: Option<ManagedGlobalRef>,
     pub cache_text_block: String,
+    pub cache_text_wrapping: Vec<(usize, usize)>,
 }
 
 #[derive(Debug)]
@@ -131,7 +134,7 @@ impl<'a, T> Iterator for TaffyTreeIterator<'a, T> {
     }
 }
 
-pub fn collect_text_blocks(doc: &mut TaffyTree<TuiNodeContext>, root_id: NodeId) {
+pub fn collect_text_blocks(doc: &mut TaffyTree<TuiNodeContext>, root_id: NodeId) -> Vec<NodeId> {
     let mut textbox_line = HashMap::<NodeId, String>::new();
     for node in TaffyTreeIterator::new(doc, root_id) {
         if let Some(TuiNodeContext::TextBox(ctx)) = doc.get_node_context(node) {
@@ -159,7 +162,7 @@ pub fn collect_text_blocks(doc: &mut TaffyTree<TuiNodeContext>, root_id: NodeId)
             textbox_line.insert(node, ctx.text.to_string());
         }
     }
-
+    let dirty_text_blocks = textbox_line.keys().map(|k| k.clone()).collect::<Vec<_>>();
     for (k, v) in textbox_line {
         match doc.get_node_context_mut(k) {
             Some(TuiNodeContext::TextBox(ctx)) => {
@@ -170,6 +173,145 @@ pub fn collect_text_blocks(doc: &mut TaffyTree<TuiNodeContext>, root_id: NodeId)
             }
         }
     }
+    dirty_text_blocks
+}
+
+pub fn to_wrapped_position(
+    source_ranges: &[(usize, usize)],
+    wrapped_width: usize,
+    source_position: usize,
+    align_begin: bool,
+) -> usize {
+    if align_begin {
+        for (i, &(begin, end)) in source_ranges.iter().enumerate() {
+            if source_position < end {
+                return (source_position.max(begin) - begin) + wrapped_width * i;
+            }
+        }
+        return source_ranges.len() * wrapped_width;
+    } else {
+        for (i, &(begin, end)) in source_ranges.iter().rev().enumerate() {
+            if source_position >= begin {
+                let reversed_index = source_ranges.len() - 1 - i;
+                return (source_position.min(end) - begin) + wrapped_width * reversed_index;
+            }
+        }
+        return 0;
+    }
+}
+
+pub fn update_inline_text_range(
+    doc: &mut TaffyTree<TuiNodeContext>,
+    node_id: NodeId,
+    text_wrapping: &[(usize, usize)],
+    container_width: usize,
+    source_position: &mut usize,
+    line_breaks: &mut Vec<(usize, usize)>,
+) {
+    let range = if let Some(ctx) = doc.get_node_context(node_id) {
+        match ctx {
+            TuiNodeContext::Text(_) => {
+                let begin =
+                    to_wrapped_position(text_wrapping, container_width, *source_position, true);
+                let line_break_begin = line_breaks.len();
+                for child_id in doc.children(node_id).unwrap() {
+                    update_inline_text_range(
+                        doc,
+                        child_id,
+                        text_wrapping,
+                        container_width,
+                        source_position,
+                        line_breaks,
+                    )
+                }
+                Some((
+                    begin,
+                    to_wrapped_position(text_wrapping, container_width, *source_position, false),
+                    line_break_begin,
+                ))
+            }
+            TuiNodeContext::TextLeaf(ctx) => {
+                for l in ctx.text.lines() {
+                    *source_position += l.len();
+                    line_breaks.push((
+                        to_wrapped_position(
+                            text_wrapping,
+                            container_width,
+                            *source_position,
+                            false,
+                        ),
+                        to_wrapped_position(text_wrapping, container_width, *source_position, true),
+                    ));
+                }
+                None
+            }
+            TuiNodeContext::TextTreeRoot(_) => {
+                for child_id in doc.children(node_id).unwrap() {
+                    update_inline_text_range(
+                        doc,
+                        child_id,
+                        text_wrapping,
+                        container_width,
+                        source_position,
+                        line_breaks,
+                    )
+                }
+                None
+            }
+            _ => {
+                panic!("should not reach {:?}", ctx);
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(range) = range {
+        if let Some(TuiNodeContext::Text(ctx)) = doc.get_node_context_mut(node_id) {
+            let mut begin = range.0;
+            let mut ranges: Vec<(usize, usize)> = Vec::new();
+            for i in range.2..line_breaks.len() {
+                ranges.push((begin, line_breaks[i].0));
+                begin = line_breaks[i].1;
+            }
+            ranges.push((begin, range.1));
+            ctx.target_ranges = ranges;
+        }
+    }
+}
+
+pub fn update_collect_wrapped_text(doc: &mut TaffyTree<TuiNodeContext>, dirty_node_ids: &[NodeId]) {
+    for &node_id in dirty_node_ids {
+        let width: usize = doc.layout(node_id).unwrap().content_box_width() as usize;
+        let text_tree_root: NodeId;
+        let cache_text_wrapping: Vec<(usize, usize)>;
+        match doc.get_node_context(node_id) {
+            Some(TuiNodeContext::TextBox(ctx)) => {
+                cache_text_wrapping = wrap_to_range(&ctx.cache_text_block, width);
+                text_tree_root = ctx.text_tree_root;
+            }
+            _ => {
+                panic!("should not reacch!");
+            }
+        };
+
+        update_inline_text_range(
+            doc,
+            text_tree_root,
+            &cache_text_wrapping,
+            width,
+            &mut 0,
+            &mut Vec::new(),
+        );
+
+        match doc.get_node_context_mut(node_id) {
+            Some(TuiNodeContext::TextBox(ctx)) => {
+                ctx.cache_text_wrapping = cache_text_wrapping;
+            }
+            _ => {
+                panic!("should not reacch!");
+            }
+        };
+    }
 }
 
 pub struct Canvas {
@@ -177,6 +319,65 @@ pub struct Canvas {
     height: usize,
     buffer: Vec<Vec<char>>,
     faces: Vec<(usize, usize, ManagedGlobalRef)>,
+}
+
+fn wrap_to_range(content: &str, width: usize) -> Vec<(usize, usize)> {
+    let wrapped = textwrap::wrap(content, width);
+    let mut char_iter = content.chars();
+    let mut ranges = Vec::<(usize, usize)>::new();
+    let mut i = 0;
+    for line in wrapped {
+        let mut line_char_iter = line.chars();
+        let mut line_white_space = 0;
+        let mut line_first_char = ' ';
+        while let Some(char) = line_char_iter.next() {
+            if char == ' ' {
+                line_white_space += 1;
+            } else {
+                line_first_char = char;
+                break;
+            }
+        }
+        while let Some(char) = char_iter.next() {
+            if char == line_first_char {
+                let start = i - line_white_space;
+                while line_char_iter.next().is_some() {
+                    char_iter.next().unwrap();
+                    i += 1;
+                }
+                i += 1;
+                ranges.push((start, i));
+                break;
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    ranges
+}
+
+pub fn get_absolut_location(
+    doc: &TaffyTree<TuiNodeContext>,
+    root_id: NodeId,
+    node_id: NodeId,
+) -> Option<(usize, usize)> {
+    let layout = doc.layout(node_id).unwrap();
+    let mut x = layout.location.x as usize;
+    let mut y = layout.location.y as usize;
+    let mut current_node_id = node_id;
+    while let Some(parent_node_id) = doc.parent(current_node_id) {
+        let layout = doc.layout(parent_node_id).unwrap();
+        x += layout.location.x as usize;
+        y += layout.location.y as usize;
+        current_node_id = parent_node_id;
+    }
+    if current_node_id == root_id {
+        Some((x, y))
+    } else {
+        // not mounted
+        None
+    }
 }
 
 impl Canvas {
@@ -229,16 +430,24 @@ impl Canvas {
             let content_x = parent_x + layout.content_box_x() as usize;
             let content_y = parent_y + layout.content_box_y() as usize;
             self.draw_text(content_x, content_y, &wrapped_text);
-            self.draw_text_face(
+            // self.draw_text_face(
+            //     doc,
+            //     ctx.text_tree_root,
+            //     &wrapped_text,
+            //     parent_x + layout.content_box_x() as usize,
+            //     parent_y + layout.content_box_y() as usize,
+            //     &mut 0,
+            //     &mut 0,
+            //     &mut Vec::<ManagedGlobalRef>::new(),
+            // );
+
+            self.draw_text_face_2(
                 doc,
                 ctx.text_tree_root,
-                &wrapped_text,
                 parent_x + layout.content_box_x() as usize,
                 parent_y + layout.content_box_y() as usize,
-                &mut 0,
-                &mut 0,
-                &mut Vec::<ManagedGlobalRef>::new(),
-            )
+                layout.content_box_width() as usize,
+            );
         } else {
             for child_id in doc.children(id).unwrap() {
                 self.draw(doc, x, y, child_id);
@@ -263,11 +472,76 @@ impl Canvas {
             }
         }
     }
+
     #[inline]
     pub fn to_position(&self, x: usize, y: usize) -> usize {
         // + 1 for position starts from 1
         // self.width + 1 for trailling line break
         x + y * (self.width + 1) + 1
+    }
+
+    #[inline]
+    pub fn to_global_ranges(
+        &self,
+        container_x: usize,
+        container_y: usize,
+        container_width: usize,
+        local_range: (usize, usize),
+        global_ranges: &mut Vec<(usize, usize)>,
+    ) {
+        // + 1 for position starts from 1
+        // self.width + 1 for trailling line break
+        let mut local_x = local_range.0 % container_width;
+        let begin_global_y = local_range.0 / container_width + container_y;
+        let end_global_y = local_range.1 / container_width + container_y;
+        for global_y in begin_global_y..end_global_y {
+            global_ranges.push((
+                1 + container_x + local_x + global_y * (self.width + 1),
+                1 + container_x + container_width + global_y * (self.width + 1),
+            ));
+            local_x = 0;
+        }
+        global_ranges.push((
+            1 + container_x + local_x + end_global_y * (self.width + 1),
+            1 + container_x + (local_range.1 % container_width) + end_global_y * (self.width + 1),
+        ));
+    }
+
+    pub fn draw_text_face_2(
+        &mut self,
+        doc: &TaffyTree<TuiNodeContext>,
+        node_id: NodeId,
+        text_box_content_x: usize,
+        text_box_content_y: usize,
+        text_box_content_width: usize,
+    ) {
+        if let Some(TuiNodeContext::Text(ctx)) = doc.get_node_context(node_id) {
+            let target_ranges = &ctx.target_ranges;
+            if let Some(face) = &ctx.face {
+                let mut global_ranges = Vec::<(usize, usize)>::new();
+                for local_range in target_ranges {
+                    self.to_global_ranges(
+                        text_box_content_x,
+                        text_box_content_y,
+                        text_box_content_width,
+                        *local_range,
+                        &mut global_ranges,
+                    );
+                }
+                for range in global_ranges {
+                    self.faces.push((range.0, range.1, face.clone()))
+                }
+            }
+        }
+        for child_id in doc.children(node_id).unwrap() {
+            self.draw_text_face_2(
+                doc,
+                child_id,
+                text_box_content_x,
+                text_box_content_y,
+                text_box_content_width,
+            );
+        }
     }
 
     pub fn draw_text_face(
@@ -587,7 +861,7 @@ impl RenderingContext {
             return None;
         }
 
-        collect_text_blocks(&mut self.doc, self.root_id);
+        let dirty_text_blocks = collect_text_blocks(&mut self.doc, self.root_id);
 
         self.doc
             .compute_layout_with_measure(
@@ -616,6 +890,8 @@ impl RenderingContext {
                 },
             )
             .unwrap();
+
+        update_collect_wrapped_text(&mut self.doc, &dirty_text_blocks);
 
         let layout = self.doc.layout(self.root_id).unwrap();
         let mut canvas = Canvas::new(layout.size.width as usize, layout.size.height as usize);
@@ -658,17 +934,7 @@ impl RenderingContext {
 
     pub fn get_absolute_location(&self, element_id: usize) -> Option<(usize, usize)> {
         if let Some(node_id) = self.dioxus_state.node_id_mapping[element_id] {
-            let layout = self.doc.layout(node_id).unwrap();
-            let mut x = layout.location.x as usize;
-            let mut y = layout.location.y as usize;
-            let mut current_node_id = node_id;
-            while let Some(parent_node_id) = self.doc.parent(current_node_id) {
-                let layout = self.doc.layout(parent_node_id).unwrap();
-                x += layout.location.x as usize;
-                y += layout.location.y as usize;
-                current_node_id = parent_node_id;
-            }
-            Some((x, y))
+            get_absolut_location(&self.doc, self.root_id, node_id)
         } else {
             None
         }
