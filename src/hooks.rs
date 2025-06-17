@@ -28,7 +28,7 @@ fn use_drop<'e>(_: &'e Env, destroy: Value) -> Result<()> {
     dioxus_core::prelude::use_drop(move || {
         CURRENT_EMACS_ENV.with(|env| {
             if let Err(e) = destroy_ref.as_ref().call(env, []) {
-                set_elisp_error(e);
+                set_elisp_error(e, &destroy_ref);
             }
         })
     });
@@ -53,7 +53,7 @@ fn use_hook_with_cleanup<'e>(
         move |value_ref| {
             CURRENT_EMACS_ENV.with(|env| {
                 if let Err(err) = cleanup_ref.as_ref().call(env, [value_ref.bind(env)]) {
-                    set_elisp_error(err);
+                    set_elisp_error(err, &cleanup_ref);
                 }
             })
         },
@@ -137,7 +137,7 @@ fn use_memo<'e>(env: &'e Env, init: Value) -> Result<Value<'e>> {
                 let res = match init_ref.as_ref().call(inner_env, []) {
                     Ok(res) => ManagedGlobalRef::from(res),
                     Err(err) => {
-                        set_elisp_error(err);
+                        set_elisp_error(err, &init_ref);
                         ManagedGlobalRef::from(nil.bind(inner_env))
                     }
                 };
@@ -182,7 +182,7 @@ fn use_effect<'e>(_: &'e Env, f: Value) -> Result<()> {
     dioxus_hooks::use_effect(move || {
         CURRENT_EMACS_ENV.with(|env| {
             if let Err(e) = f_ref.as_ref().call(env, []) {
-                set_elisp_error(e);
+                set_elisp_error(e, &f_ref);
             }
         })
     });
@@ -195,7 +195,7 @@ fn use_before_render<'e>(_: &'e Env, f: Value) -> Result<()> {
     dioxus_core::prelude::use_before_render(move || {
         CURRENT_EMACS_ENV.with(|env| {
             if let Err(e) = f_ref.as_ref().call(env, []) {
-                set_elisp_error(e);
+                set_elisp_error(e, &f_ref);
             }
         })
     });
@@ -208,7 +208,7 @@ fn use_after_render<'e>(_: &'e Env, f: Value) -> Result<()> {
     dioxus_core::prelude::use_after_render(move || {
         CURRENT_EMACS_ENV.with(|env| {
             if let Err(e) = f_ref.as_ref().call(env, []) {
-                set_elisp_error(e);
+                set_elisp_error(e, &f_ref);
             }
         })
     });

@@ -76,7 +76,21 @@ thread_local! {
 }
 
 // Store an error in thread-local storage
-pub fn set_elisp_error(err: emacs::Error) {
+pub fn set_elisp_error(err: emacs::Error, callback_ref: &ManagedGlobalRef) {
+    let func_desc = CURRENT_EMACS_ENV.with(|env| {
+        env.call("prin1-to-string", [callback_ref.bind(env)])
+            .unwrap()
+            .into_rust::<String>()
+            .unwrap()
+    });
+    let stack_trace = std::backtrace::Backtrace::capture();
+
+    // Print stack trace for debugging
+    eprintln!(
+        "Elisp callback error occurred: {}\nStack trace:\n{}\n{}",
+        err, stack_trace, func_desc
+    );
+
     LAST_ELISP_ERROR.with(|e| {
         *e.borrow_mut() = Some(err);
     });

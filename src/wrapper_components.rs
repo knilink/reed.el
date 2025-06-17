@@ -126,7 +126,7 @@ fn build_attr_value(value: Value) -> dioxus_core::AttributeValue {
         dioxus_core::AttributeValue::listener(move |e: dioxus_core::Event<ManagedGlobalRef>| {
             CURRENT_EMACS_ENV.with(|env| {
                 if let Err(e) = callback_ref.as_ref().call(env, [e.data.bind(env)]) {
-                    set_elisp_error(e);
+                    set_elisp_error(e, &callback_ref);
                 }
             });
         })

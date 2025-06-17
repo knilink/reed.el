@@ -74,8 +74,9 @@ impl MutationWriter<'_> {
     }
 
     fn mark_maybe_text_box_dirty(&mut self, maybe_text_node: NodeId) {
-        if let Some(TuiNodeContext::Text(_) | TuiNodeContext::TextLeaf(_)) =
-            self.doc.get_node_context(maybe_text_node)
+        if let Some(
+            TuiNodeContext::Text(_) | TuiNodeContext::TextLeaf(_) | TuiNodeContext::PlaceHolder,
+        ) = self.doc.get_node_context(maybe_text_node)
         {
             let mut current_id = maybe_text_node;
             while let Some(parent_id) = self.doc.parent(current_id) {
@@ -126,8 +127,10 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         #[cfg(feature = "tracing")]
         tracing::info!("[create_placeholder] id:{}", id.0);
 
-        // TODO: None taffy node context
-        let node_id = self.doc.new_leaf(Default::default()).unwrap();
+        let node_id = self
+            .doc
+            .new_leaf_with_context(Default::default(), TuiNodeContext::PlaceHolder)
+            .unwrap();
         self.set_id_mapping(node_id, id);
         self.state.stack.push(node_id);
     }
@@ -167,6 +170,7 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
 
         insert_before(self.doc, anchor_node_id, &new_nodes);
         self.remove_node(anchor_node_id).unwrap();
+        self.state.node_id_mapping[id.0] = None;
     }
 
     fn replace_placeholder_with_nodes(&mut self, path: &'static [u8], m: usize) {

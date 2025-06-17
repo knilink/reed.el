@@ -6,7 +6,6 @@ use crate::text_measurement::measure_text_block;
 use crate::wrapper_components::RootComponent;
 
 use dioxus_core::VirtualDom;
-use dioxus_signals::get_global_context;
 use emacs::Value;
 use similar::{ChangeTag, TextDiff};
 use std::borrow::Cow;
@@ -60,6 +59,7 @@ pub enum TuiNodeContext {
     Text(TextNodeContext),
     TextLeaf(TextLeafContext),
     ErrorMessage(ErrorMessageContext),
+    PlaceHolder,
 }
 
 fn _edit_instruction(old_text: &str, new_text: &str) -> Vec<(usize, usize, String)> {
@@ -168,8 +168,11 @@ pub fn collect_text_blocks(doc: &mut TaffyTree<TuiNodeContext>, root_id: NodeId)
             Some(TuiNodeContext::TextBox(ctx)) => {
                 ctx.cache_text_block = v;
             }
+            Some(TuiNodeContext::TextLeaf(_)) => {
+                //TODO: warn here
+            }
             _ => {
-                panic!("should not reach");
+                panic!("should not reach {:?}", doc.get_node_context_mut(k));
             }
         }
     }
@@ -258,6 +261,7 @@ pub fn update_inline_text_range(
                 }
                 None
             }
+            TuiNodeContext::PlaceHolder => None,
             _ => {
                 panic!("should not reach {:?}", ctx);
             }
@@ -288,6 +292,10 @@ pub fn update_collect_wrapped_text(doc: &mut TaffyTree<TuiNodeContext>, dirty_no
             Some(TuiNodeContext::TextBox(ctx)) => {
                 cache_text_wrapping = wrap_to_range(&ctx.cache_text_block, width);
                 text_tree_root = ctx.text_tree_root;
+            }
+            Some(TuiNodeContext::TextLeaf(_)) => {
+                continue;
+                //TODO: warn here
             }
             _ => {
                 panic!("should not reacch!");
@@ -323,35 +331,18 @@ pub struct Canvas {
 
 fn wrap_to_range(content: &str, width: usize) -> Vec<(usize, usize)> {
     let wrapped = textwrap::wrap(content, width);
-    let mut char_iter = content.chars();
-    let mut ranges = Vec::<(usize, usize)>::new();
-    let mut i = 0;
+    let content_start = content.as_ptr() as usize;
+    let mut ranges = Vec::new();
+
     for line in wrapped {
-        let mut line_char_iter = line.chars();
-        let mut line_white_space = 0;
-        let mut line_first_char = ' ';
-        while let Some(char) = line_char_iter.next() {
-            if char == ' ' {
-                line_white_space += 1;
-            } else {
-                line_first_char = char;
-                break;
-            }
-        }
-        while let Some(char) = char_iter.next() {
-            if char == line_first_char {
-                let start = i - line_white_space;
-                while line_char_iter.next().is_some() {
-                    char_iter.next().unwrap();
-                    i += 1;
-                }
-                i += 1;
-                ranges.push((start, i));
-                break;
-            } else {
-                i += 1;
-            }
-        }
+        let line_start = line.as_ptr() as usize;
+        let start_byte = line_start - content_start;
+        // let end_byte = start_byte + line.len();
+
+        let char_start = content[..start_byte].chars().count();
+        let char_end = char_start + line.chars().count();
+
+        ranges.push((char_start, char_end));
     }
 
     ranges
@@ -441,7 +432,7 @@ impl Canvas {
             //     &mut Vec::<ManagedGlobalRef>::new(),
             // );
 
-            self.draw_text_face_2(
+            self.draw_text_face(
                 doc,
                 ctx.text_tree_root,
                 parent_x + layout.content_box_x() as usize,
@@ -507,7 +498,7 @@ impl Canvas {
         ));
     }
 
-    pub fn draw_text_face_2(
+    pub fn draw_text_face(
         &mut self,
         doc: &TaffyTree<TuiNodeContext>,
         node_id: NodeId,
@@ -534,130 +525,13 @@ impl Canvas {
             }
         }
         for child_id in doc.children(node_id).unwrap() {
-            self.draw_text_face_2(
+            self.draw_text_face(
                 doc,
                 child_id,
                 text_box_content_x,
                 text_box_content_y,
                 text_box_content_width,
             );
-        }
-    }
-
-    pub fn draw_text_face(
-        &mut self,
-        doc: &TaffyTree<TuiNodeContext>,
-        node_id: NodeId,
-        wrapped_text: &Vec<Cow<'_, str>>,
-        x: usize,
-        y: usize,
-        cursor_x: &mut usize,
-        cursor_y: &mut usize,
-        face_stack: &mut Vec<ManagedGlobalRef>,
-    ) {
-        if let Some(ctx) = doc.get_node_context(node_id) {
-            match ctx {
-                TuiNodeContext::TextLeaf(ctx) => {
-                    let mut begin = *cursor_x;
-                    let mut maybe_trailling_whitespaces = 0;
-
-                    for char in ctx.text.chars() {
-                        // skip heading whitespace
-                        if *cursor_x == 0 && char == ' ' {
-                            continue;
-                        }
-                        if char == ' ' {
-                            maybe_trailling_whitespaces += 1;
-                        } else if char != '\n' {
-                            maybe_trailling_whitespaces = 0;
-                        }
-
-                        if char == '\n' {
-                            *cursor_x -= maybe_trailling_whitespaces;
-                            if *cursor_x > 0 {
-                                let absolute_y = y + *cursor_y;
-                                for face in face_stack.iter() {
-                                    self.faces.push((
-                                        self.to_position(x + begin, absolute_y),
-                                        self.to_position(x + *cursor_x, absolute_y),
-                                        face.clone(),
-                                    ));
-                                }
-                            }
-                            *cursor_x = 0;
-                            *cursor_y += 1;
-                            maybe_trailling_whitespaces = 0;
-                            begin = 0;
-                        } else {
-                            *cursor_x += 1;
-                            if *cursor_x - maybe_trailling_whitespaces
-                                > wrapped_text[*cursor_y].chars().count()
-                            {
-                                let absolute_y = y + *cursor_y;
-                                for face in face_stack.iter() {
-                                    self.faces.push((
-                                        self.to_position(x + begin, absolute_y),
-                                        self.to_position(x + *cursor_x, absolute_y),
-                                        face.clone(),
-                                    ));
-                                }
-                                *cursor_x = 0;
-                                *cursor_y += 1;
-                                maybe_trailling_whitespaces = 0;
-                                begin = 0;
-                            }
-                        };
-                    }
-                }
-                TuiNodeContext::Text(ctx) => {
-                    let maybe_face = ctx.face.clone();
-                    let has_face = maybe_face.is_some();
-                    let begin_x = *cursor_x;
-                    let begin_y = *cursor_y;
-                    if let Some(face) = maybe_face {
-                        face_stack.push(face);
-                    }
-
-                    for child_id in doc.children(node_id).unwrap() {
-                        self.draw_text_face(
-                            doc,
-                            child_id,
-                            wrapped_text,
-                            x,
-                            y,
-                            cursor_x,
-                            cursor_y,
-                            face_stack,
-                        );
-                    }
-
-                    if has_face {
-                        let face = face_stack.pop().unwrap();
-                        self.faces.push((
-                            self.to_position(
-                                if *cursor_y == begin_y { x + begin_x } else { x },
-                                y + *cursor_y,
-                            ),
-                            self.to_position(x + *cursor_x, y + *cursor_y),
-                            face,
-                        ));
-                    }
-                }
-                _ => {
-                    for child_id in doc.children(node_id).unwrap() {
-                        self.draw_text_face(
-                            doc,
-                            child_id,
-                            wrapped_text,
-                            x,
-                            y,
-                            cursor_x,
-                            cursor_y,
-                            face_stack,
-                        );
-                    }
-                }
-            }
         }
     }
 
