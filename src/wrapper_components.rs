@@ -1,6 +1,6 @@
 use crate::globals::{
-    CURRENT_EMACS_ENV, MEMO_TABLES, ROOT_COMPONENT, SIGNAL_TABLES, SignalTable, TEMPLATE_REGISTRY,
-    set_elisp_error,
+    CURRENT_EMACS_ENV, DIOXUS_EVENT, MEMO_TABLES, ROOT_COMPONENT, SIGNAL_TABLES, SignalTable,
+    TEMPLATE_REGISTRY, set_elisp_error,
 };
 use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
@@ -30,7 +30,18 @@ fn build_element(vnode: Value) -> Element {
     let key: Option<String> = {
         let key: Value = cur.car().unwrap();
         if key.is_not_nil() {
-            Some(key.into_rust::<String>().unwrap())
+            if let Ok(key) = key.into_rust::<String>() {
+                Some(key)
+            } else {
+                // TODO warn here
+                Some(
+                    key.env
+                        .call("prin1-to-string", [key])
+                        .unwrap()
+                        .into_rust::<String>()
+                        .unwrap(),
+                )
+            }
         } else {
             None
         }
@@ -125,9 +136,11 @@ fn build_attr_value(value: Value) -> dioxus_core::AttributeValue {
         let callback_ref = ManagedGlobalRef::from(value);
         dioxus_core::AttributeValue::listener(move |e: dioxus_core::Event<ManagedGlobalRef>| {
             CURRENT_EMACS_ENV.with(|env| {
-                if let Err(e) = callback_ref.as_ref().call(env, [e.data.bind(env)]) {
-                    set_elisp_error(e, &callback_ref);
-                }
+                DIOXUS_EVENT.set(&e, || {
+                    if let Err(e) = callback_ref.as_ref().call(env, [e.data.bind(env)]) {
+                        set_elisp_error(e, &callback_ref);
+                    }
+                })
             });
         })
     } else {

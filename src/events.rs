@@ -102,6 +102,20 @@ fn create_event(
     dioxus_core::Event::new(std::rc::Rc::new(event_payload), propagates)
 }
 
+fn is_ancestor<T>(doc: &TaffyTree<T>, node_a: NodeId, node_b: NodeId) -> bool {
+    let mut current = node_b;
+
+    // Walk up the tree from node_b towards the root
+    while let Some(parent) = doc.parent(current) {
+        if parent == node_a {
+            return true;
+        }
+        current = parent;
+    }
+
+    false
+}
+
 impl TuiEventManager {
     pub fn new() -> Self {
         Self {
@@ -232,17 +246,31 @@ impl TuiEventManager {
                         }
                     }
                 }
-                for element_id in self.click.iter().rev() {
+
+                let mut clicking_element_id: Option<ElementId> = None;
+                for element_id in self.click.iter() {
                     if let Some(node_id) = node_id_mapping[element_id.0] {
                         if is_point_in_node(doc, root_id, node_id, x, y) {
-                            runtime.handle_event(
-                                "click",
-                                create_event(event_payload.clone(), true),
-                                *element_id,
-                            );
-                            break;
+                            if let Some(clicking_element_id_) = clicking_element_id {
+                                if is_ancestor(
+                                    doc,
+                                    node_id_mapping[clicking_element_id_.0].unwrap(),
+                                    node_id,
+                                ) {
+                                    clicking_element_id = Some(*element_id);
+                                }
+                            } else {
+                                clicking_element_id = Some(*element_id);
+                            }
                         }
                     }
+                }
+                if let Some(element_id) = clicking_element_id {
+                    runtime.handle_event(
+                        "click",
+                        create_event(event_payload.clone(), true),
+                        element_id,
+                    );
                 }
             }
             _ => {

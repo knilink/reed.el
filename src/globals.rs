@@ -6,6 +6,7 @@ use scoped_tls::scoped_thread_local;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct HandleTable<T> {
     counter: usize,
     table: Vec<T>,
@@ -44,6 +45,7 @@ impl<T> HandleTable<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct SignalTable<T> {
     pub signal: HandleTable<T>,
 }
@@ -66,6 +68,10 @@ scoped_thread_local! {
 
 scoped_thread_local! {
     pub static CURRENT_EMACS_ENV: Env
+}
+
+scoped_thread_local! {
+    pub static DIOXUS_EVENT:dioxus_core::Event<ManagedGlobalRef>
 }
 
 thread_local! {

@@ -9,7 +9,7 @@ mod template;
 mod text_measurement;
 mod utils;
 mod wrapper_components;
-use crate::globals::{CURRENT_EMACS_ENV, take_elisp_error};
+use crate::globals::{CURRENT_EMACS_ENV, DIOXUS_EVENT, take_elisp_error};
 use crate::rendering_context::RenderingContext;
 use crate::template::register;
 use std::cell::RefCell;
@@ -260,5 +260,11 @@ fn emit_event<'e>(
             );
         });
     });
+    Ok(())
+}
+
+#[defun]
+fn event_stop_propagation<'e>(_: &'e Env) -> Result<()> {
+    DIOXUS_EVENT.with(|e| e.stop_propagation());
     Ok(())
 }

@@ -30,29 +30,31 @@ Returns nil if STR is not a valid number."
 
 
 (defun reed-style--process-style (style)
-  `(list
-    ,@(mapcar
-       (lambda (field)
-         (let ((key (car field))
-               (value (cdr field)))
-           `(cons
-             ',key
-             ,(cond
-               ((eq value 'AUTO) (string-to-number (reed-taffy-length 'auto 0.0)))
-               ((eq value 'ZERO) (string-to-number (reed-taffy-length 'zero 0.0)))
-               ((symbolp value)
-                (let ((len (reed-style--parse-number-with-percent (symbol-name value))))
-                  (if (not len)
-                      value
-                    (string-to-number
-                     (if (cdr len)
-                         (reed-taffy-length 'percent (car len))
-                       (reed-taffy-length 'length (car len)))))))
-               ((consp value)
-                (if (eq (car value) 'quote) value
-                  (reed-style--process-style value)))
-               (t value))))
-         ) style)))
+  (if (consp (car style))
+      `(list
+        ,@(mapcar
+           (lambda (field)
+             (let ((key (car field))
+                   (value (cdr field)))
+               `(cons
+                 ',key
+                 ,(cond
+                   ((eq value 'AUTO) (string-to-number (reed-taffy-length 'auto 0.0)))
+                   ((eq value 'ZERO) (string-to-number (reed-taffy-length 'zero 0.0)))
+                   ((symbolp value)
+                    (let ((len (reed-style--parse-number-with-percent (symbol-name value))))
+                      (if (not len)
+                          value
+                        (string-to-number
+                         (if (cdr len)
+                             (reed-taffy-length 'percent (car len))
+                           (reed-taffy-length 'length (car len)))))))
+                   ((consp value)
+                    (if (eq (car value) 'quote) value
+                      (reed-style--process-style value)))
+                   (t value))))
+             ) style))
+    style))
 
 (defmacro style! (&rest body)
   (reed-style--process-style body))
