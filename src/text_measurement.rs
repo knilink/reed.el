@@ -78,9 +78,9 @@ fn min_width(text: &[char], lines: usize) -> usize {
     max_width.max(trimed_length(current_text))
 }
 
-pub fn min_width_multiline(texts: &[char], max_height: usize) -> Option<usize> {
-    if texts.is_empty() || max_height == 0 {
-        return None;
+pub fn min_width_multiline(texts: &[char], max_height: usize) -> usize {
+    if texts.is_empty() {
+        return 0;
     }
 
     // Initialize each text with height=1, width=text.len()
@@ -88,6 +88,7 @@ pub fn min_width_multiline(texts: &[char], max_height: usize) -> Option<usize> {
     let mut splits = vec![1; lines.len()];
 
     let mut max_i = 0;
+    let max_height = max_height.max(lines.len());
     for _ in 0..(max_height - lines.len()) {
         for i in 0..lines.len() {
             if lines[i].len() * splits[max_i] > lines[max_i].len() * splits[i] {
@@ -104,7 +105,7 @@ pub fn min_width_multiline(texts: &[char], max_height: usize) -> Option<usize> {
     }
 
     // Return the maximum width among all lines
-    Some(min_width(lines[max_i], splits[max_i]))
+    min_width(lines[max_i], splits[max_i])
 }
 
 pub fn measure_text_block(
@@ -144,7 +145,7 @@ pub fn measure_text_block(
             AvailableSpace::Definite(height),
         ) => {
             let content_vec = content.chars().collect::<Vec<_>>();
-            let width = min_width_multiline(&content_vec, height as usize).unwrap();
+            let width = min_width_multiline(&content_vec, height as usize);
             let wrapped = textwrap::wrap(content, width);
             let height = wrapped.len();
             let width = wrapped
