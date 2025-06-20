@@ -33,7 +33,7 @@
   ;(define-key reed-app-mode-map (kbd "[RET]") 'reed-handle-click)
   (local-set-key (kbd "RET") #'reed-handle-click))
 
-(defun reed-render-buffer (app-name root-component)
+(defun reed-render-to-buffer (app-name root-component)
   (with-current-buffer (get-buffer-create app-name)
     (buffer-disable-undo)
     (reed-register-app app-name root-component)

@@ -1,3 +1,4 @@
+use crate::emacs_symbols::vnode as vnode_symbol;
 use crate::globals::{
     CURRENT_EMACS_ENV, DIOXUS_EVENT, MEMO_TABLES, ROOT_COMPONENT, SIGNAL_TABLES, SignalTable,
     TEMPLATE_REGISTRY, set_elisp_error,
@@ -6,7 +7,7 @@ use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
 use dioxus_core::{Element, IntoDynNode, fc_to_builder};
 use dioxus_core_macro::{Props, component};
-use emacs::{Value, Vector};
+use emacs::{IntoLisp, Value, Vector};
 
 struct ListIter<'a> {
     list: Value<'a>,
@@ -16,9 +17,9 @@ impl<'a> Iterator for ListIter<'a> {
     type Item = Value<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.list.is_not_nil() {
-            let a = self.list.car().unwrap();
+            let a: Value = self.list.car().unwrap();
             self.list = self.list.cdr().unwrap();
-            a
+            Some(a)
         } else {
             None
         }
@@ -26,7 +27,7 @@ impl<'a> Iterator for ListIter<'a> {
 }
 
 fn build_element(vnode: Value) -> Element {
-    let mut cur = vnode;
+    let mut cur: Value = vnode.cdr().unwrap(); // skip the first vnode symbol
     let key: Option<String> = {
         let key: Value = cur.car().unwrap();
         if key.is_not_nil() {
@@ -100,11 +101,14 @@ fn build_dynamic_nodes(nodes: Vector) -> Vec<dioxus_core::DynamicNode> {
                         // {null}
                         dioxus_core::DynamicNode::default()
                     } else if let Ok(first) = element.car::<Value>() {
-                        if !first.is_not_nil() || first.into_rust::<String>().is_ok() {
+                        // key element is string or nil
+                        if first.eq(vnode_symbol.bind(first.env)) {
                             build_element(element).into_dyn_node()
                         } else {
                             let iter = ListIter { list: element };
-                            iter.map(|item| build_element(item)).into_dyn_node()
+                            iter.filter(|item| item.is_not_nil()) // MARK maybe should allow nil
+                                .map(|item| build_element(item))
+                                .into_dyn_node()
                         }
                     } else {
                         dioxus_core::DynamicNode::default()
@@ -298,7 +302,7 @@ pub fn RootComponent() -> Element {
             // };
             let element = root_component_ref.as_ref().call(env, []).unwrap();
 
-            let mut cursor = element;
+            let mut cursor: Value = element.cdr().unwrap();
             let key: Option<String> = {
                 let key: Value = cursor.car().unwrap();
                 if key.is_not_nil() {
