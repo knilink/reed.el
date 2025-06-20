@@ -11,6 +11,8 @@ use std::borrow::Cow;
 use taffy::prelude::{NodeId, TaffyTree};
 use taffy::{Style, TaffyResult};
 
+pub const DEFAULT_BORDER_CHARS: [char; 8] = ['│', '─', '│', '─', '┌', '┐', '┘', '└'];
+
 pub struct DioxusState {
     /// Store of templates keyed by unique name
     // templates: FxHashMap<Template, Vec<NodeId>>,
@@ -225,6 +227,28 @@ impl dioxus_core::WriteMutations for MutationWriter<'_> {
         );
 
         match name {
+            "border-chars" => match value {
+                AttributeValue::Text(value) => {
+                    let mut new_chars = [' '; 8];
+                    for (i, c) in value.chars().take(8).enumerate() {
+                        new_chars[i] = c;
+                    }
+                    if let Some(ctx) = self.doc.get_node_context_mut(node_id) {
+                        match ctx {
+                            TuiNodeContext::Box(ctx) => {
+                                *self.should_redraw |= ctx.border_chars != new_chars;
+                                ctx.border_chars = new_chars;
+                            }
+                            TuiNodeContext::TextBox(ctx) => {
+                                *self.should_redraw |= ctx.border_chars != new_chars;
+                                ctx.border_chars = new_chars;
+                            }
+                            _ => {}
+                        };
+                    };
+                }
+                _ => {}
+            },
             "style" => match value {
                 AttributeValue::Text(value) => {
                     let new_style = serde_lexpr::from_str(&value).unwrap();
@@ -400,6 +424,7 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
             children,
         } => {
             let mut style: Option<Style> = None;
+            let mut border_chars = DEFAULT_BORDER_CHARS;
 
             for attr in attrs.iter() {
                 if let dioxus_core::TemplateAttribute::Static {
@@ -412,6 +437,13 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
                         "style" => {
                             style = Some(serde_lexpr::from_str(&value).unwrap());
                         }
+                        "border-chars" => {
+                            let mut new_chars = [' '; 8];
+                            for (i, c) in value.chars().take(8).enumerate() {
+                                new_chars[i] = c;
+                            }
+                            border_chars = new_chars;
+                        }
                         _ => {}
                     }
                 }
@@ -419,11 +451,15 @@ fn create_template_node(doc: &mut TaffyTree<TuiNodeContext>, node: &TemplateNode
 
             let new_context = match *tag {
                 // box
-                "div" => TuiNodeContext::Box(BoxNodeContext { face: None }),
+                "div" => TuiNodeContext::Box(BoxNodeContext {
+                    face: None,
+                    border_chars,
+                }),
                 // textbox
                 "p" => TuiNodeContext::TextBox(TextBoxLeafContext {
                     text_tree_root: doc.new_leaf(Default::default()).unwrap(),
                     face: None,
+                    border_chars,
                     cache_text_block: String::new(),
                     cache_text_wrapping: Vec::new(),
                 }),

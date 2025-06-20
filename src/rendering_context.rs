@@ -32,6 +32,7 @@ pub struct TextNodeContext {
 #[derive(Debug)]
 pub struct BoxNodeContext {
     pub face: Option<ManagedGlobalRef>,
+    pub border_chars: [char; 8],
 }
 
 #[derive(Debug)]
@@ -47,6 +48,7 @@ pub struct TextTreeRootContext {
 pub struct TextBoxLeafContext {
     pub text_tree_root: NodeId,
     pub face: Option<ManagedGlobalRef>,
+    pub border_chars: [char; 8],
     pub cache_text_block: String,
     pub cache_text_wrapping: Vec<(usize, usize)>,
 }
@@ -412,8 +414,18 @@ impl Canvas {
                     i_y += 1;
                 }
             };
+
+            match ctx {
+                TuiNodeContext::Box(ctx) => {
+                    self.draw_border(parent_x, parent_y, layout, &ctx.border_chars);
+                }
+                TuiNodeContext::TextBox(ctx) => {
+                    self.draw_border(parent_x, parent_y, layout, &ctx.border_chars);
+                }
+                _ => {}
+            }
         }
-        self.draw_border(parent_x, parent_y, layout);
+
         if let Some(TuiNodeContext::TextBox(ctx)) = maybe_ctx {
             let text_content = &ctx.cache_text_block;
             let width: usize = layout.content_box_width() as usize;
@@ -535,7 +547,13 @@ impl Canvas {
         }
     }
 
-    pub fn draw_border(&mut self, parent_x: usize, parent_y: usize, layout: &Layout) {
+    pub fn draw_border(
+        &mut self,
+        parent_x: usize,
+        parent_y: usize,
+        layout: &Layout,
+        border_chars: &[char; 8],
+    ) {
         let content_left = layout.content_box_x() as usize + parent_x;
         let content_top = layout.content_box_y() as usize + parent_y;
         let content_right = content_left + (layout.content_box_width() as usize); //.saturating_sub(1);
@@ -548,84 +566,115 @@ impl Canvas {
         let top = layout.location.y as usize + parent_y;
         let right = left + (layout.size.width as usize); //.saturating_sub(1);
         let bottom = top + (layout.size.height as usize); //.saturating_sub(1);
-        let mut chars = "│─│─┌┐┘└".chars();
-        // let mut chars = "████████".chars();
-        // let mut chars = "|=|=/\\/\\".chars();
-        // let mut chars = "".chars();
+
+        #[inline]
+        fn safe_set(buffer: &mut Vec<Vec<char>>, i: usize, j: usize, c: char) {
+            if let Some(row) = buffer.get_mut(i) {
+                if let Some(col) = row.get_mut(j) {
+                    *col = c
+                }
+            }
+        }
 
         let left_width = content_left - left;
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[0] {
+            let c = border_chars[0];
             for i in 0..left_width {
                 let ii = left_width - i - 1;
                 for j in
                     std::cmp::max(content_top - ii, top)..std::cmp::min(content_bottom + ii, bottom)
                 {
-                    self.buffer[j][left + i] = c;
+                    // self.buffer[j][left + i] = c;
+                    safe_set(&mut self.buffer, j, left + i, c);
                 }
             }
         }
 
         let top_width = content_top - top;
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[1] {
+            let c = border_chars[1];
             for i in 0..top_width {
                 let ii = top_width - i - 1;
                 for j in
                     std::cmp::max(content_left - ii, left)..std::cmp::min(content_right + ii, right)
                 {
-                    self.buffer[top + i][j] = c;
+                    // self.buffer[top + i][j] = c;
+                    safe_set(&mut self.buffer, top + i, j, c);
                 }
             }
         }
 
         let right_width = right - content_right;
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[2] {
+            let c = border_chars[2];
             for i in 0..right_width {
                 let ii = right_width - i - 1;
                 for j in
                     std::cmp::max(content_top - ii, top)..std::cmp::min(content_bottom + ii, bottom)
                 {
-                    self.buffer[j][right - 1 - i] = c;
+                    // self.buffer[j][right - 1 - i] = c;
+                    safe_set(&mut self.buffer, j, right - 1 - i, c);
                 }
             }
         }
 
         let bottom_width = bottom - content_bottom;
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[3] {
+            let c = border_chars[3];
             for i in 0..bottom_width {
                 let ii = bottom_width - i - 1;
                 for j in
                     std::cmp::max(content_left - ii, left)..std::cmp::min(content_right + ii, right)
                 {
-                    self.buffer[bottom - 1 - i][j] = c;
+                    // self.buffer[bottom - 1 - i][j] = c;
+                    safe_set(&mut self.buffer, bottom - 1 - i, j, c);
                 }
             }
         }
 
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[4] {
+            let c = border_chars[4];
             for i in 0..std::cmp::min(left_width, top_width) {
-                self.buffer[content_top - 1 - i][content_left - 1 - i] = c;
+                // self.buffer[content_top - 1 - i][content_left - 1 - i] = c;
                 // self.buffer[top + i][left + i] = c;
+                safe_set(
+                    &mut self.buffer,
+                    content_top - 1 - i,
+                    content_left - 1 - i,
+                    c,
+                );
             }
         }
 
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[5] {
+            let c = border_chars[5];
             for i in 0..std::cmp::min(right_width, top_width) {
-                self.buffer[content_top - 1 - i][content_right + i] = c;
+                // self.buffer[content_top - 1 - i][content_right + i] = c;
                 // self.buffer[top + i][right - i - 1] = '┐';
+                safe_set(&mut self.buffer, content_top - 1 - i, content_right + i, c);
             }
         }
 
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[6] {
+            let c = border_chars[6];
             for i in 0..std::cmp::min(right_width, bottom_width) {
-                self.buffer[content_bottom + i][content_right + i] = c;
+                // self.buffer[content_bottom + i][content_right + i] = c;
                 // self.buffer[bottom - i - 1][right - i - 1] = '┘';
+                safe_set(&mut self.buffer, bottom - i - 1, right - i - 1, c);
             }
         }
 
-        if let Some(c) = chars.next() {
+        if ' ' != border_chars[7] {
+            let c = border_chars[7];
             for i in 0..std::cmp::min(left_width, bottom_width) {
-                self.buffer[content_bottom + i][content_left - i - 1] = c;
+                // self.buffer[content_bottom + i][content_left - i - 1] = c;
                 // self.buffer[bottom - i - 1][left + i] = '└';
+                safe_set(
+                    &mut self.buffer,
+                    content_bottom + i,
+                    content_left - i - 1,
+                    c,
+                );
             }
         }
     }
