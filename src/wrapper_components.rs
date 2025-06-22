@@ -7,7 +7,7 @@ use crate::managed_global_ref::ManagedGlobalRef;
 use crate::utils::{intern, plist_get, symbol_name};
 use dioxus_core::{Element, IntoDynNode, fc_to_builder};
 use dioxus_core_macro::{Props, component};
-use emacs::{IntoLisp, Value, Vector};
+use emacs::{Value, Vector};
 
 struct ListIter<'a> {
     list: Value<'a>,

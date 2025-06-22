@@ -127,7 +127,7 @@ pub fn measure_text_block(
             let width = lines
                 .map(|l| {
                     height += 1;
-                    l.len()
+                    l.chars().count()
                 })
                 .max()
                 .unwrap_or(0);

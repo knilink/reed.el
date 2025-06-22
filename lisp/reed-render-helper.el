@@ -3,9 +3,10 @@
 (defvar-local reed--last-post-command-position 0
   "Stores point position after last command.")
 
-(defvar reed--last-buffer-width (window-width))
+(defun reed-get-app-window-size ()
+  (cons (window-width) nil))
 
-(defun reed-scale-windows-width (width) width)
+(defvar reed--last-app-window-size (reed-get-app-window-size))
 
 (defun reed-handle-click ()
   (interactive)
@@ -19,10 +20,11 @@
       (setq reed--last-post-command-position (point))
       (setq should-render t)
       (reed-handle-cursor-event app-name 'move reed--last-post-command-position '()))
-    (when (not (= reed--last-buffer-width (window-width)))
-      (setq reed--last-buffer-width (window-width))
-      (setq should-render t)
-      (reed-set-width app-name (reed-scale-windows-width reed--last-buffer-width)))
+    (let ((app-window-size (reed-get-app-window-size)))
+      (when (and app-window-size (not (equal reed--last-app-window-size app-window-size)))
+        (setq reed--last-app-window-size app-window-size)
+        (setq should-render t)
+        (reed-set-size app-name reed--last-app-window-size)))
     (when should-render
       (reed-handle-render app-name))))
 
@@ -33,11 +35,13 @@
   ;(define-key reed-app-mode-map (kbd "[RET]") 'reed-handle-click)
   (local-set-key (kbd "RET") #'reed-handle-click))
 
+
+
 (defun reed-render-to-buffer (app-name root-component)
   (with-current-buffer (get-buffer-create app-name)
     (buffer-disable-undo)
     (reed-register-app app-name root-component)
-    (reed-set-width app-name (reed-scale-windows-width reed--last-buffer-width))
+    (reed-set-size app-name (reed-get-app-window-size))
     (switch-to-buffer app-name)
     (reed-app-mode)
     (reed-handle-render app-name)))

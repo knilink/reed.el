@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::usize;
 use taffy::{
     TraversePartialTree,
-    prelude::{Dimension, FromLength, Layout, NodeId, Size, Style, TaffyMaxContent, TaffyTree},
+    prelude::{
+        Dimension, FromLength, Layout, NodeId, Size, Style, TaffyAuto, TaffyMaxContent, TaffyTree,
+    },
 };
 
 #[derive(Debug)]
@@ -407,8 +409,8 @@ impl Canvas {
                 let mut i_y = y;
                 while i_y < height + y {
                     self.faces.push((
-                        self.to_position(x, i_y),
-                        self.to_position(x + width, i_y),
+                        self.to_position(x.min(self.width), i_y.min(self.height)),
+                        self.to_position((x + width).min(self.width), (i_y).min(self.height)),
                         face_ref.clone(),
                     ));
                     i_y += 1;
@@ -696,7 +698,6 @@ pub struct RenderingContext {
     root_id: NodeId,
     dioxus_state: DioxusState,
     event_manager: TuiEventManager,
-    window_width: usize,
     should_redraw: bool,
     // result_cache: String,
     // size: Size<AvailableSpace>,
@@ -707,7 +708,15 @@ impl RenderingContext {
         let mut vdom = VirtualDom::new(RootComponent);
         let root_component_ref = ManagedGlobalRef::from(root_component);
         let mut doc: TaffyTree<TuiNodeContext> = TaffyTree::new();
-        let root_id = doc.new_leaf(Default::default()).unwrap();
+        let root_id = doc
+            .new_leaf(Style {
+                size: Size {
+                    width: Dimension::from_length(80.0),
+                    height: Dimension::AUTO,
+                },
+                ..Default::default()
+            })
+            .unwrap();
         let mut dioxus_state = DioxusState {
             stack: Vec::new(),
             node_id_mapping: [Some(root_id)].to_vec(),
@@ -732,33 +741,41 @@ impl RenderingContext {
             root_id,
             dioxus_state,
             event_manager,
-            window_width: 80,
             should_redraw,
             // result_cache: String::new(),
             // size: Size::MAX_CONTENT,
         }
     }
 
-    pub fn set_width(&mut self, width: usize) {
-        // self.size.width = AvailableSpace::from_length(width);
+    pub fn set_size(&mut self, (width, height): (Option<usize>, Option<usize>)) {
         self.should_redraw = true;
-        self.window_width = width;
-        let width = width as f32;
+
+        let width_dim = match width {
+            Some(w) => Dimension::from_length(w as f32),
+            None => Dimension::AUTO,
+        };
+
+        let height_dim = match height {
+            Some(h) => Dimension::from_length(h as f32),
+            None => Dimension::AUTO,
+        };
+
         let style = self.doc.style(self.root_id).unwrap();
         let _ = self.doc.set_style(
             self.root_id,
             Style {
-                size: Size::<Dimension> {
-                    width: Dimension::from_length(width),
-                    ..style.size
+                size: Size {
+                    width: width_dim,
+                    height: height_dim,
                 },
                 ..style.clone()
             },
         );
     }
 
-    pub fn get_width(&self) -> usize {
-        self.window_width
+    pub fn get_size(&self) -> (usize, usize) {
+        let size = self.doc.layout(self.root_id).unwrap().size;
+        (size.width as usize, size.height as usize)
     }
 
     pub fn render(
@@ -799,6 +816,7 @@ impl RenderingContext {
                             available_space,
                             ctx.cache_text_block
                         );
+
                         let res = measure_text_block(known_dimensions, available_space, &ctx.cache_text_block);
                         #[cfg(feature = "tracing")]
                         tracing::debug!(
@@ -834,15 +852,14 @@ impl RenderingContext {
         event_payload: ManagedGlobalRef,
     ) {
         let cursor_pos = cursor_pos - 1;
+        let layout = self.doc.layout(self.root_id).unwrap();
+        let width = layout.size.width as usize;
         self.event_manager.handle_cursor_event(
             event_name,
             self.vdom.runtime(),
             &self.doc,
             &self.dioxus_state.node_id_mapping,
-            (
-                (cursor_pos % (self.window_width + 1)),
-                (cursor_pos / (self.window_width + 1)),
-            ),
+            ((cursor_pos % (width + 1)), (cursor_pos / (width + 1))),
             event_payload,
         );
     }

@@ -19,7 +19,7 @@ use emacs::{CallEnv, Env, IntoLisp, Result, Value, Vector, defun};
 use managed_global_ref::ManagedGlobalRef;
 use taffy::{
     CompactLength,
-    style_helpers::{FromLength, FromPercent, TaffyAuto, TaffyZero},
+    style_helpers::{FromFr, FromLength, FromPercent, TaffyAuto, TaffyZero},
 };
 use utils::symbol_name;
 
@@ -141,21 +141,21 @@ fn clear_rendering_contexts<'e>(env: &'e Env) -> Result<()> {
 }
 
 #[defun]
-fn set_width<'e>(_: &'e Env, name: String, value: usize) -> Result<()> {
+fn set_size<'e>(_: &'e Env, name: String, value: Value) -> Result<()> {
     RENDERING_CONTEXTS.with(|contexts| {
         let mut ctxs = contexts.borrow_mut();
         let ctx = ctxs.get_mut(&name).unwrap();
-        ctx.set_width(value);
+        ctx.set_size((value.car().ok(), value.cdr().ok()));
     });
     Ok(())
 }
 
 #[defun]
-fn get_width<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
-    let maybe_width =
-        RENDERING_CONTEXTS.with(|contexts| contexts.borrow().get(&name).map(|ctx| ctx.get_width()));
-    match maybe_width {
-        Some(width) => width.into_lisp(env),
+fn get_size<'e>(env: &'e Env, name: String) -> Result<Value<'e>> {
+    let maybe_size =
+        RENDERING_CONTEXTS.with(|contexts| contexts.borrow().get(&name).map(|ctx| ctx.get_size()));
+    match maybe_size {
+        Some((width, height)) => env.cons(width, height),
         None => ().into_lisp(env),
     }
 }
@@ -173,6 +173,7 @@ fn taffy_length<'e>(_: &'e Env, unit: Value, value: Value) -> Result<String> {
     let res = match unit_name.as_ref() {
         "percent" => Some(serde_lexpr::to_string(&CompactLength::from_percent(value))),
         "length" => Some(serde_lexpr::to_string(&CompactLength::from_length(value))),
+        "fr" => Some(serde_lexpr::to_string(&CompactLength::from_fr(value))),
         "auto" => Some(serde_lexpr::to_string(&CompactLength::AUTO)),
         "zero" => Some(serde_lexpr::to_string(&CompactLength::ZERO)),
         _ => None,
